@@ -1,2 +1,7 @@
-# Object file
-*.o
+# build directory
+build/
+
+#Waf Lock
+.lock-waf_linux2_build
+
+.waf*/
