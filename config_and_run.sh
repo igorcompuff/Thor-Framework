@@ -1,6 +1,7 @@
 #!/bin/bash
 
-./waf configure --enable-tests --enable-examples --with-pybindgen=/home/igor/bake/source/pybindgen
+#PYTHON_BIND must be set to point to the correct pybindgen directory
 
+./waf configure --enable-tests --enable-examples --with-pybindgen=$PYTHON_BIND
 ./waf
 
