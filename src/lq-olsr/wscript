@@ -1,0 +1,39 @@
+# -*- Mode: python; py-indent-offset: 4; indent-tabs-mode: nil; coding: utf-8; -*-
+
+# def options(opt):
+#     pass
+
+# def configure(conf):
+#     conf.check_nonfatal(header_name='stdint.h', define_name='HAVE_STDINT_H')
+
+def build(bld):
+    module = bld.create_ns3_module('lq-olsr', ['internet'])
+    module.source = [
+        'model/lq-olsr.cc',
+        'model/lq-olsr-routing-protocol.cc',
+        'model/lq-olsr-header.cc',
+        'model/lq-olsr-state.cc',
+        'helper/lq-olsr-helper.cc',
+        ]
+
+    module_test = bld.create_ns3_module_test_library('lq-olsr')
+    module_test.source = [
+        'test/lq-olsr-test-suite.cc',
+        ]
+
+    headers = bld(features='ns3header')
+    headers.module = 'lq-olsr'
+    headers.source = [
+        'model/lq-olsr.h',
+        'model/lq-olsr-routing-protocol.h',
+        'model/lq-olsr-header.h',
+        'model/lq-olsr-state.h',
+        'model/lq-olsr-repositories.h',
+        'helper/lq-olsr-helper.h',
+        ]
+
+    if bld.env.ENABLE_EXAMPLES:
+        bld.recurse('examples')
+
+    # bld.ns3_python_bindings()
+
