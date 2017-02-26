@@ -30,7 +30,7 @@
 
 namespace ns3 {
 
-NS_LOG_COMPONENT_DEFINE ("OlsrHeader");
+NS_LOG_COMPONENT_DEFINE ("LqOlsrHeader");
 
 namespace lqolsr {
 
@@ -166,7 +166,7 @@ namespace lqolsr {
   TypeId
   MessageHeader::GetTypeId (void)
   {
-    static TypeId tid = TypeId ("ns3::olsr::MessageHeader")
+    static TypeId tid = TypeId ("ns3::lqolsr::MessageHeader")
       .SetParent<Header> ()
       .SetGroupName ("LqOlsr")
       .AddConstructor<MessageHeader> ()
@@ -246,7 +246,7 @@ namespace lqolsr {
 	m_message.lqHello.Serialize (i);
 	break;
       case LQ_TC_MESSAGE:
-	m_message.lqHello.Serialize (i);
+	m_message.lqTc.Serialize (i);
 	break;
       default:
         NS_ASSERT (false);
@@ -259,7 +259,7 @@ namespace lqolsr {
     uint32_t size;
     Buffer::Iterator i = start;
     m_messageType  = (MessageType) i.ReadU8 ();
-    NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= HNA_MESSAGE);
+    NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= LQ_TC_MESSAGE);
     m_vTime  = i.ReadU8 ();
     m_messageSize  = i.ReadNtohU16 ();
     m_originatorAddress = Ipv4Address (i.ReadNtohU32 ());
