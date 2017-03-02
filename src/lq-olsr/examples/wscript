@@ -3,4 +3,7 @@
 def build(bld):
     obj = bld.create_ns3_program('lq-olsr-example', ['lq-olsr'])
     obj.source = 'lq-olsr-example.cc'
+    obj = bld.create_ns3_program('simple-point-to-point-lq-olsr',
+                                 ['point-to-point', 'internet', 'lq-olsr', 'applications', 'wifi'])
+    obj.source = 'simple-point-to-point-lq-olsr.cc'
 
