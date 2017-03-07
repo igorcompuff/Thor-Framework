@@ -53,14 +53,14 @@ public:
     /*
      * Gets the cost of the link/path to the specified ifaddress
      */
-    virtual double GetCost(Ipv4Address & neighborIfaceAddress) const = 0;
+    virtual float GetCost(const Ipv4Address & neighborIfaceAddress) const = 0;
 
     virtual uint32_t GetMetricInfo(const Ipv4Address & neighborIfaceAddress) const = 0;
 
     /*
      * Get the highest link cost possible.
      */
-    virtual double GetInfinityCostValue() = 0;
+    virtual float GetInfinityCostValue() = 0;
 
     /*
      * Notifies the metric about the reception of a message, so it can take the appropriate

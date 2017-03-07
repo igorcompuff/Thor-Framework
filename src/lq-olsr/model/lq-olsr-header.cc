@@ -575,7 +575,7 @@ namespace lqolsr {
   uint32_t
   MessageHeader::LqTc::GetSerializedSize (void) const
   {
-    return 4 + this->neighborInfo.size () * (IPV4_ADDRESS_SIZE + 4);
+    return 4 + this->neighborAddresses.size () * (IPV4_ADDRESS_SIZE + 4);
   }
 
   void
@@ -592,8 +592,8 @@ namespace lqolsr {
     i.WriteHtonU16 (this->ansn);
     i.WriteHtonU16 (0); // Reserved
 
-    for (std::vector<NeighborInterfaceInfo>::const_iterator iter = this->neighborInfo.begin ();
-         iter != this->neighborInfo.end (); iter++)
+    for (std::vector<NeighborInterfaceInfo>::const_iterator iter = this->neighborAddresses.begin ();
+         iter != this->neighborAddresses.end (); iter++)
       {
         i.WriteHtonU32 (iter->neighborInterfaceAddress.Get ());
         i.WriteHtonU32 (iter->metricInfo);
@@ -612,14 +612,14 @@ namespace lqolsr {
 
     NS_ASSERT ((messageSize - 4) % (IPV4_ADDRESS_SIZE + 4) == 0);
     int numAddresses = (messageSize - 4) / (IPV4_ADDRESS_SIZE + 4);
-    this->neighborInfo.clear ();
+    this->neighborAddresses.clear ();
 
     NeighborInterfaceInfo neigh_info;
     for (int n = 0; n < numAddresses; ++n)
       {
         neigh_info.neighborInterfaceAddress = Ipv4Address (i.ReadNtohU32 ());
         neigh_info.metricInfo = i.ReadNtohU32 ();
-	this->neighborInfo.push_back (neigh_info);
+	this->neighborAddresses.push_back (neigh_info);
       }
 
     return messageSize;

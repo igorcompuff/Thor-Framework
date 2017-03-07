@@ -523,6 +523,11 @@ private:
   void SendTc ();
 
   /**
+   * \brief Sends a LqTC message.
+   */
+  void SendLqTc ();
+
+  /**
    * \brief Creates a new %OLSR MID message which is buffered for being sent later on.
    */
   void SendMid ();
@@ -542,9 +547,11 @@ private:
 
   /*
    *\brief Creates a new message to send.
+   *\param vTime the VTime of the message
+   *\param timeToLive the Time to Live of the message
    */
   lqolsr::MessageHeader
-  CreateNewMessage();
+  CreateNewMessage(Time vTime, uint8_t timeToLive);
 
   /**
    * \brief Performs all actions needed when a neighbor loss occurs.

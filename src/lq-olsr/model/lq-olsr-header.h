@@ -412,12 +412,12 @@ namespace lqolsr {
        * This method is used to print the content of a MID message.
        * \param os output stream
        */
-      void Print (std::ostream &os) const;
+      virtual void Print (std::ostream &os) const;
       /**
        * Returns the expected size of the header.
        * \returns the expected size of the header.
        */
-      uint32_t GetSerializedSize (void) const;
+      virtual uint32_t GetSerializedSize (void) const;
       /**
        * This method is used by Packet::AddHeader to
        * store a header into the byte buffer of a packet.
@@ -425,7 +425,7 @@ namespace lqolsr {
        * \param start an iterator which points to where the header should
        *        be written.
        */
-      void Serialize (Buffer::Iterator start) const;
+      virtual void Serialize (Buffer::Iterator start) const;
       /**
        * This method is used by Packet::RemoveHeader to
        * re-create a header from the byte buffer of a packet.
@@ -435,7 +435,7 @@ namespace lqolsr {
        * \param messageSize the message size.
        * \returns the number of bytes read.
        */
-      uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
+      virtual uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
     };
 
     //Associates an interface to the metric of the link to this interface
@@ -484,7 +484,7 @@ namespace lqolsr {
     \endverbatim
     */
 
-    struct LqHello
+    struct LqHello: Hello
     {
       /**
        * Link message item
@@ -495,39 +495,18 @@ namespace lqolsr {
 	std::vector<NeighborInterfaceInfo> neighborInterfaceInformation;  //!< Neighbor interface information container.
       };
 
-      uint8_t hTime;  //!< HELLO emission interval (coded)
-
-      /**
-       * Set the HELLO emission interval.
-       * \param time The HELLO emission interval.
-       */
-      void SetHTime (Time time)
-      {
-	this->hTime = SecondsToEmf (time.GetSeconds ());
-      }
-
-      /**
-       * Get the HELLO emission interval.
-       * \return The HELLO emission interval.
-       */
-      Time GetHTime () const
-      {
-	return Seconds (EmfToSeconds (this->hTime));
-      }
-
-      uint8_t willingness; //!< The willingness of a node to carry and forward traffic for other nodes.
       std::vector<LinkMessage> linkMessages; //!< Link messages container.
 
       /**
        * This method is used to print the content of a LqHello message.
        * \param os output stream
        */
-      void Print (std::ostream &os) const;
+      virtual void Print (std::ostream &os) const;
       /**
        * Returns the expected size of the header.
        * \returns the expected size of the header.
        */
-      uint32_t GetSerializedSize (void) const;
+      virtual uint32_t GetSerializedSize (void) const;
       /**
        * This method is used by Packet::AddHeader to
        * store a header into the byte buffer of a packet.
@@ -535,7 +514,7 @@ namespace lqolsr {
        * \param start an iterator which points to where the header should
        *        be written.
        */
-      void Serialize (Buffer::Iterator start) const;
+      virtual void Serialize (Buffer::Iterator start) const;
       /**
        * This method is used by Packet::RemoveHeader to
        * re-create a header from the byte buffer of a packet.
@@ -545,7 +524,7 @@ namespace lqolsr {
        * \param messageSize the message size.
        * \returns the number of bytes read.
        */
-      uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
+      virtual uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
     };
 
     /**
@@ -575,12 +554,12 @@ namespace lqolsr {
        * This method is used to print the content of a MID message.
        * \param os output stream
        */
-      void Print (std::ostream &os) const;
+      virtual void Print (std::ostream &os) const;
       /**
        * Returns the expected size of the header.
        * \returns the expected size of the header.
        */
-      uint32_t GetSerializedSize (void) const;
+      virtual uint32_t GetSerializedSize (void) const;
       /**
        * This method is used by Packet::AddHeader to
        * store a header into the byte buffer of a packet.
@@ -588,7 +567,7 @@ namespace lqolsr {
        * \param start an iterator which points to where the header should
        *        be written.
        */
-      void Serialize (Buffer::Iterator start) const;
+      virtual void Serialize (Buffer::Iterator start) const;
       /**
        * This method is used by Packet::RemoveHeader to
        * re-create a header from the byte buffer of a packet.
@@ -598,7 +577,7 @@ namespace lqolsr {
        * \param messageSize the message size.
        * \returns the number of bytes read.
        */
-      uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
+      virtual uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
     };
 
     /**
@@ -623,21 +602,20 @@ namespace lqolsr {
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     \endverbatim
     */
-    struct LqTc
+    struct LqTc: Tc
     {
-      std::vector<NeighborInterfaceInfo> neighborInfo; //!< Neighbor interface information container.
-      uint16_t ansn;  //!< Advertised Neighbor Sequence Number.
+      std::vector<NeighborInterfaceInfo> neighborAddresses; //!< Neighbor interface information container.
 
       /**
        * This method is used to print the content of a MID message.
        * \param os output stream
        */
-      void Print (std::ostream &os) const;
+      virtual void Print (std::ostream &os) const;
       /**
        * Returns the expected size of the header.
        * \returns the expected size of the header.
        */
-      uint32_t GetSerializedSize (void) const;
+      virtual uint32_t GetSerializedSize (void) const;
       /**
        * This method is used by Packet::AddHeader to
        * store a header into the byte buffer of a packet.
@@ -645,7 +623,7 @@ namespace lqolsr {
        * \param start an iterator which points to where the header should
        *        be written.
        */
-      void Serialize (Buffer::Iterator start) const;
+      virtual void Serialize (Buffer::Iterator start) const;
       /**
        * This method is used by Packet::RemoveHeader to
        * re-create a header from the byte buffer of a packet.
@@ -655,7 +633,7 @@ namespace lqolsr {
        * \param messageSize the message size.
        * \returns the number of bytes read.
        */
-      uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
+      virtual uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
     };
 
 

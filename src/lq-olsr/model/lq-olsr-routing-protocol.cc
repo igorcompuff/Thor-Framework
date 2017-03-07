@@ -33,6 +33,7 @@
 
 
 #include "lq-olsr-routing-protocol.h"
+#include "lq-olsr-util.h"
 #include "ns3/socket-factory.h"
 #include "ns3/udp-socket-factory.h"
 #include "ns3/simulator.h"
@@ -155,11 +156,11 @@ RoutingProtocol::GetTypeId (void)
     .SetParent<Ipv4RoutingProtocol> ()
     .SetGroupName ("LqOlsr")
     .AddConstructor<RoutingProtocol> ()
-    .AddAttribute ("HelloInterval", "HELLO messages emission interval.",
+    .AddAttribute ("HelloInterval", "HELLO/L_HELLO messages emission interval.",
                    TimeValue (Seconds (2)),
                    MakeTimeAccessor (&RoutingProtocol::m_helloInterval),
                    MakeTimeChecker ())
-    .AddAttribute ("TcInterval", "TC messages emission interval.",
+    .AddAttribute ("TcInterval", "TC/LQ_TC messages emission interval.",
                    TimeValue (Seconds (5)),
                    MakeTimeAccessor (&RoutingProtocol::m_tcInterval),
                    MakeTimeChecker ())
@@ -1639,13 +1640,13 @@ RoutingProtocol::SendQueuedMessages ()
 }
 
 lqolsr::MessageHeader
-RoutingProtocol::CreateNewMessage()
+RoutingProtocol::CreateNewMessage(Time vTime, uint8_t timeToLive)
 {
   lqolsr::MessageHeader msg;
 
-  msg.SetVTime (OLSR_NEIGHB_HOLD_TIME);
+  msg.SetVTime (vTime);
   msg.SetOriginatorAddress (m_mainAddress);
-  msg.SetTimeToLive (1);
+  msg.SetTimeToLive (timeToLive);
   msg.SetHopCount (0);
   msg.SetMessageSequenceNumber (GetMessageSequenceNumber ());
 
@@ -1729,7 +1730,7 @@ RoutingProtocol::SendLqHello()
 
   Time now = Simulator::Now ();
 
-  lqolsr::MessageHeader msg = CreateNewMessage();
+  lqolsr::MessageHeader msg = CreateNewMessage(OLSR_NEIGHB_HOLD_TIME, 1);
 
   lqolsr::MessageHeader::LqHello &lqhello = msg.GetLqHello ();
 
@@ -1788,7 +1789,7 @@ RoutingProtocol::SendHello ()
 
   Time now = Simulator::Now ();
 
-  lqolsr::MessageHeader msg = CreateNewMessage();
+  lqolsr::MessageHeader msg = CreateNewMessage(OLSR_NEIGHB_HOLD_TIME, 1);
 
   lqolsr::MessageHeader::Hello &hello = msg.GetHello ();
 
@@ -1828,17 +1829,35 @@ RoutingProtocol::SendHello ()
 }
 
 void
+RoutingProtocol::SendLqTc ()
+{
+  NS_LOG_FUNCTION (this);
+
+  lqolsr::MessageHeader msg = CreateNewMessage(OLSR_TOP_HOLD_TIME, 255);
+
+  lqolsr::MessageHeader::LqTc &lqtc = msg.GetLqTc ();
+  lqtc.ansn = m_ansn;
+
+  for (MprSelectorSet::const_iterator mprsel_tuple = m_state.GetMprSelectors ().begin ();
+       mprsel_tuple != m_state.GetMprSelectors ().end (); mprsel_tuple++)
+    {
+      lqolsr::MessageHeader::NeighborInterfaceInfo neigh_info;
+      neigh_info.neighborInterfaceAddress = mprsel_tuple->mainAddr;
+
+      float cost = m_metric->GetCost(mprsel_tuple->mainAddr);
+      neigh_info.metricInfo = pack754_32(cost);
+
+      lqtc.neighborAddresses.push_back (neigh_info);
+    }
+  QueueMessage (msg, JITTER);
+}
+
+void
 RoutingProtocol::SendTc ()
 {
   NS_LOG_FUNCTION (this);
 
-  lqolsr::MessageHeader msg;
-
-  msg.SetVTime (OLSR_TOP_HOLD_TIME);
-  msg.SetOriginatorAddress (m_mainAddress);
-  msg.SetTimeToLive (255);
-  msg.SetHopCount (0);
-  msg.SetMessageSequenceNumber (GetMessageSequenceNumber ());
+  lqolsr::MessageHeader msg = CreateNewMessage(OLSR_TOP_HOLD_TIME, 255);
 
   lqolsr::MessageHeader::Tc &tc = msg.GetTc ();
   tc.ansn = m_ansn;
@@ -2671,7 +2690,14 @@ RoutingProtocol::TcTimerExpire ()
 {
   if (m_state.GetMprSelectors ().size () > 0)
     {
-      SendTc ();
+      if (linkQualityEnabled)
+	{
+	  SendLqTc();
+	}
+      else
+	{
+	  SendTc ();
+	}
     }
   else
     {

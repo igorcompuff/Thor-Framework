@@ -361,11 +361,11 @@ LqOlsrTcTestCase::DoRun (void)
   lqolsr::MessageHeader::NeighborInterfaceInfo neighInfo;
   neighInfo.neighborInterfaceAddress = Ipv4Address ("1.2.3.4");
   neighInfo.metricInfo = 50;
-  tcIn.neighborInfo.push_back (neighInfo);
+  tcIn.neighborAddresses.push_back (neighInfo);
 
   neighInfo.neighborInterfaceAddress = Ipv4Address ("1.2.3.5");
   neighInfo.metricInfo = 60;
-  tcIn.neighborInfo.push_back (neighInfo);
+  tcIn.neighborAddresses.push_back (neighInfo);
   packet.AddHeader (msgIn);
 
   lqolsr::MessageHeader msgOut;
@@ -373,13 +373,13 @@ LqOlsrTcTestCase::DoRun (void)
   lqolsr::MessageHeader::LqTc &lqTcOut = msgOut.GetLqTc ();
 
   NS_TEST_ASSERT_MSG_EQ (lqTcOut.ansn, 0x1234, "400");
-  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborInfo.size (), 2, "401");
+  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborAddresses.size (), 2, "401");
 
-  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborInfo[0].neighborInterfaceAddress, Ipv4Address("1.2.3.4"), "402.a");
-  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborInfo[0].metricInfo, 50, "402.b");
+  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborAddresses[0].neighborInterfaceAddress, Ipv4Address("1.2.3.4"), "402.a");
+  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborAddresses[0].metricInfo, 50, "402.b");
 
-  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborInfo[1].neighborInterfaceAddress, Ipv4Address("1.2.3.5"), "403.a");
-  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborInfo[1].metricInfo, 60, "403.b");
+  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborAddresses[1].neighborInterfaceAddress, Ipv4Address("1.2.3.5"), "403.a");
+  NS_TEST_ASSERT_MSG_EQ (lqTcOut.neighborAddresses[1].metricInfo, 60, "403.b");
 
   NS_TEST_ASSERT_MSG_EQ (packet.GetSize (), 0, "404");
 
