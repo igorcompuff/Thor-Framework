@@ -54,7 +54,7 @@ namespace lqolsr {
     /// Time at which this tuple expires and must be removed.
     Time time;
     ///Cost of the link
-    double cost;
+    float cost;
   };
 
   static inline bool
@@ -72,6 +72,7 @@ namespace lqolsr {
        << ", symTime=" << tuple.symTime
        << ", asymTime=" << tuple.asymTime
        << ", expTime=" << tuple.time
+	   << ", link cost=" << tuple.cost
        << ")";
     return os;
   }
@@ -119,6 +120,8 @@ namespace lqolsr {
     Ipv4Address twoHopNeighborAddr;
     /// Time at which this tuple expires and must be removed.
     Time expirationTime; // previously called 'time_'
+    // Cost of the link from neighbor to two-hop neighbor
+    float cost;
   };
 
   static inline std::ostream&
@@ -127,6 +130,7 @@ namespace lqolsr {
     os << "TwoHopNeighborTuple(neighborMainAddr=" << tuple.neighborMainAddr
        << ", twoHopNeighborAddr=" << tuple.twoHopNeighborAddr
        << ", expirationTime=" << tuple.expirationTime
+	   << ", twoHopCost=" << tuple.cost
        << ")";
     return os;
   }

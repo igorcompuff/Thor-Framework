@@ -465,17 +465,27 @@ RoutingProtocol::RecvOlsr (Ptr<Socket> socket)
 //         {
 //           peerMainAddress = inetSourceAddr.GetIpv4 () ;
 //         }
+      lqolsr::MessageHeader::MessageType mType = messageHeader.GetMessageType ();
+
+      if (mType == lqolsr::MessageHeader::LQ_HELLO_MESSAGE || mType == lqolsr::MessageHeader::LQ_TC_MESSAGE)
+	{
+	  m_metric->NotifyMessageReceived(messageHeader);
+	}
 
       if (duplicated == NULL)
         {
           switch (messageHeader.GetMessageType ())
             {
+            case lqolsr::MessageHeader::LQ_HELLO_MESSAGE:
+
             case lqolsr::MessageHeader::HELLO_MESSAGE:
               NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
                             << "s OLSR node " << m_mainAddress
                             << " received HELLO message of size " << messageHeader.GetSerializedSize ());
               ProcessHello (messageHeader, receiverIfaceAddr, senderIfaceAddr);
               break;
+
+            case lqolsr::MessageHeader::LQ_TC_MESSAGE:
 
             case lqolsr::MessageHeader::TC_MESSAGE:
               NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
@@ -2030,6 +2040,203 @@ RoutingProtocol::UsesNonOlsrOutgoingInterface (const Ipv4RoutingTableEntry &rout
   return ci != m_interfaceExclusions.end ();
 }
 
+LinkTuple*
+RoutingProtocol::CreateNewLinkTuple(const Ipv4Address &senderIface, const Ipv4Address &receiverIface, Time now, Time vtime)
+{
+  LinkTuple newLinkTuple;
+
+  newLinkTuple.neighborIfaceAddr = senderIface;
+  newLinkTuple.localIfaceAddr = receiverIface;
+  newLinkTuple.symTime = now - Seconds (1);
+  newLinkTuple.time = now + vtime ();
+
+  if (linkQualityEnabled)
+    {
+      newLinkTuple.cost = m_metric->GetInfinityCostValue();
+    }
+  return &newLinkTuple;
+}
+
+void
+RoutingProtocol::LogLinkSensing(int linkType, int neighborType)
+{
+  #ifdef NS3_LOG_ENABLE
+	const char *linkTypeName;
+	switch (linkType)
+	  {
+	  case OLSR_UNSPEC_LINK:
+	    linkTypeName = "UNSPEC_LINK";
+	    break;
+	  case OLSR_ASYM_LINK:
+	    linkTypeName = "ASYM_LINK";
+	    break;
+	  case OLSR_SYM_LINK:
+	    linkTypeName = "SYM_LINK";
+	    break;
+	  case OLSR_LOST_LINK:
+	    linkTypeName = "LOST_LINK";
+	    break;
+	    /*  no default, since lt must be in 0..3, covered above
+	  default: linkTypeName = "(invalid value!)";
+	    */
+	  }
+
+	const char *neighborTypeName;
+	switch (neighborType)
+	  {
+	  case OLSR_NOT_NEIGH:
+	    neighborTypeName = "NOT_NEIGH";
+	    break;
+	  case OLSR_SYM_NEIGH:
+	    neighborTypeName = "SYM_NEIGH";
+	    break;
+	  case OLSR_MPR_NEIGH:
+	    neighborTypeName = "MPR_NEIGH";
+	    break;
+	  default:
+	    neighborTypeName = "(invalid value!)";
+	  }
+
+	NS_LOG_DEBUG ("Looking at HELLO link messages with Link Type "
+		      << lt << " (" << linkTypeName
+		      << ") and Neighbor Type " << nt
+		      << " (" << neighborTypeName << ")");
+  #endif // NS3_LOG_ENABLE
+}
+
+bool
+RoutingProtocol::ProcessHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::MessageHeader::Hello &hello,
+				     const Ipv4Address &receiverIface, Time now, Time vTime)
+{
+  bool updated = false;
+
+  for (std::vector<lqolsr::MessageHeader::Hello::LinkMessage>::const_iterator linkMessage =
+           hello.linkMessages.begin ();
+         linkMessage != hello.linkMessages.end ();
+         linkMessage++)
+      {
+        int lt = linkMessage->linkCode & 0x03; // Link Type
+        int nt = (linkMessage->linkCode >> 2) & 0x03; // Neighbor Type
+
+        LogLinkSensing(lt, nt);
+
+        // We must not process invalid advertised links
+        if ((lt == OLSR_SYM_LINK && nt == OLSR_NOT_NEIGH)
+            || (nt != OLSR_SYM_NEIGH && nt != OLSR_MPR_NEIGH
+                && nt != OLSR_NOT_NEIGH))
+          {
+            NS_LOG_LOGIC ("HELLO link code is invalid => IGNORING");
+            continue;
+          }
+
+        for (std::vector<Ipv4Address>::const_iterator neighIfaceAddr =
+               linkMessage->neighborInterfaceAddresses.begin ();
+             neighIfaceAddr != linkMessage->neighborInterfaceAddresses.end ();
+             neighIfaceAddr++)
+          {
+            NS_LOG_DEBUG ("   -> Neighbor: " << *neighIfaceAddr);
+            if (*neighIfaceAddr == receiverIface)
+              {
+                if (lt == OLSR_LOST_LINK)
+                  {
+                    NS_LOG_LOGIC ("link is LOST => expiring it");
+                    link_tuple->symTime = now - Seconds (1);
+                    updated = true;
+                  }
+                else if (lt == OLSR_SYM_LINK || lt == OLSR_ASYM_LINK)
+                  {
+                    NS_LOG_DEBUG (*link_tuple << ": link is SYM or ASYM => should become SYM now"
+                                  " (symTime being increased to " << now + vTime ());
+                    link_tuple->symTime = now + vTime;
+                    link_tuple->time = link_tuple->symTime + OLSR_NEIGHB_HOLD_TIME;
+                    updated = true;
+                  }
+                else
+                  {
+                    NS_FATAL_ERROR ("bad link type");
+                  }
+                break;
+              }
+            else
+              {
+                NS_LOG_DEBUG ("     \\-> *neighIfaceAddr (" << *neighIfaceAddr
+                                                            << " != receiverIface (" << receiverIface << ") => IGNORING!");
+              }
+          }
+        NS_LOG_DEBUG ("Link tuple updated: " << int (updated));
+      }
+}
+
+bool
+RoutingProtocol::ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::MessageHeader::LqHello &lqhello,
+				     const Ipv4Address &receiverIface, Time now, Time vTime)
+{
+  bool updated = false;
+
+  for (std::vector<lqolsr::MessageHeader::LqHello::LinkMessage>::const_iterator linkMessage =
+      lqhello.linkMessages.begin ();
+         linkMessage != lqhello.linkMessages.end ();
+         linkMessage++)
+      {
+        int lt = linkMessage->linkCode & 0x03; // Link Type
+        int nt = (linkMessage->linkCode >> 2) & 0x03; // Neighbor Type
+
+        LogLinkSensing(lt, nt);
+
+        // We must not process invalid advertised links
+        if ((lt == OLSR_SYM_LINK && nt == OLSR_NOT_NEIGH)
+            || (nt != OLSR_SYM_NEIGH && nt != OLSR_MPR_NEIGH
+                && nt != OLSR_NOT_NEIGH))
+          {
+            NS_LOG_LOGIC ("HELLO link code is invalid => IGNORING");
+            link_tuple->cost = m_metric->GetInfinityCostValue();
+            continue;
+          }
+
+        for (std::vector<lqolsr::MessageHeader::NeighborInterfaceInfo>::const_iterator neighIfaceInfo =
+               linkMessage->neighborInterfaceInformation.begin ();
+            neighIfaceInfo != linkMessage->neighborInterfaceInformation.end ();
+            neighIfaceInfo++)
+          {
+            NS_LOG_DEBUG ("   -> Neighbor: " << neighIfaceInfo->neighborInterfaceAddress);
+
+            if (neighIfaceInfo->neighborInterfaceAddress == receiverIface)
+              {
+                if (lt == OLSR_LOST_LINK)
+                  {
+                    NS_LOG_LOGIC ("link is LOST => expiring it");
+                    link_tuple->symTime = now - Seconds (1);
+                    link_tuple->cost = m_metric->GetInfinityCostValue();
+                    updated = true;
+                  }
+                else if (lt == OLSR_SYM_LINK || lt == OLSR_ASYM_LINK)
+                  {
+                    NS_LOG_DEBUG (*link_tuple << ": link is SYM or ASYM => should become SYM now"
+                                  " (symTime being increased to " << now + vTime ());
+                    link_tuple->symTime = now + vTime;
+                    link_tuple->time = link_tuple->symTime + OLSR_NEIGHB_HOLD_TIME;
+                    link_tuple->cost = m_metric->GetCost(neighIfaceInfo->neighborInterfaceAddress);
+                    updated = true;
+                  }
+                else
+                  {
+                    NS_FATAL_ERROR ("bad link type");
+                    link_tuple->cost = m_metric->GetInfinityCostValue();
+                  }
+                break;
+              }
+            else
+              {
+                NS_LOG_DEBUG ("     \\-> *neighIfaceAddr (" << neighIfaceInfo->neighborInterfaceAddress
+                                                            << " != receiverIface (" << receiverIface << ") => IGNORING!");
+              }
+          }
+        NS_LOG_DEBUG ("Link tuple updated: " << int (updated));
+      }
+}
+
+
+
 void
 RoutingProtocol::LinkSensing (const lqolsr::MessageHeader &msg,
                               const lqolsr::MessageHeader::Hello &hello,
@@ -2047,12 +2254,7 @@ RoutingProtocol::LinkSensing (const lqolsr::MessageHeader &msg,
   LinkTuple *link_tuple = m_state.FindLinkTuple (senderIface);
   if (link_tuple == NULL)
     {
-      LinkTuple newLinkTuple;
-      // We have to create a new tuple
-      newLinkTuple.neighborIfaceAddr = senderIface;
-      newLinkTuple.localIfaceAddr = receiverIface;
-      newLinkTuple.symTime = now - Seconds (1);
-      newLinkTuple.time = now + msg.GetVTime ();
+      LinkTuple newLinkTuple = CreateNewLinkTuple(senderIface, receiverIface, now, msg.GetVTime ());
       link_tuple = &m_state.InsertLinkTuple (newLinkTuple);
       created = true;
       NS_LOG_LOGIC ("Existing link tuple did not exist => creating new one");
@@ -2064,102 +2266,16 @@ RoutingProtocol::LinkSensing (const lqolsr::MessageHeader &msg,
     }
 
   link_tuple->asymTime = now + msg.GetVTime ();
-  for (std::vector<lqolsr::MessageHeader::Hello::LinkMessage>::const_iterator linkMessage =
-         hello.linkMessages.begin ();
-       linkMessage != hello.linkMessages.end ();
-       linkMessage++)
+
+  if (linkQualityEnabled)
     {
-      int lt = linkMessage->linkCode & 0x03; // Link Type
-      int nt = (linkMessage->linkCode >> 2) & 0x03; // Neighbor Type
-
-#ifdef NS3_LOG_ENABLE
-      const char *linkTypeName;
-      switch (lt)
-        {
-        case OLSR_UNSPEC_LINK:
-          linkTypeName = "UNSPEC_LINK";
-          break;
-        case OLSR_ASYM_LINK:
-          linkTypeName = "ASYM_LINK";
-          break;
-        case OLSR_SYM_LINK:
-          linkTypeName = "SYM_LINK";
-          break;
-        case OLSR_LOST_LINK:
-          linkTypeName = "LOST_LINK";
-          break;
-          /*  no default, since lt must be in 0..3, covered above
-        default: linkTypeName = "(invalid value!)";
-          */
-        }
-
-      const char *neighborTypeName;
-      switch (nt)
-        {
-        case OLSR_NOT_NEIGH:
-          neighborTypeName = "NOT_NEIGH";
-          break;
-        case OLSR_SYM_NEIGH:
-          neighborTypeName = "SYM_NEIGH";
-          break;
-        case OLSR_MPR_NEIGH:
-          neighborTypeName = "MPR_NEIGH";
-          break;
-        default:
-          neighborTypeName = "(invalid value!)";
-        }
-
-      NS_LOG_DEBUG ("Looking at HELLO link messages with Link Type "
-                    << lt << " (" << linkTypeName
-                    << ") and Neighbor Type " << nt
-                    << " (" << neighborTypeName << ")");
-#endif // NS3_LOG_ENABLE
-
-      // We must not process invalid advertised links
-      if ((lt == OLSR_SYM_LINK && nt == OLSR_NOT_NEIGH)
-          || (nt != OLSR_SYM_NEIGH && nt != OLSR_MPR_NEIGH
-              && nt != OLSR_NOT_NEIGH))
-        {
-          NS_LOG_LOGIC ("HELLO link code is invalid => IGNORING");
-          continue;
-        }
-
-      for (std::vector<Ipv4Address>::const_iterator neighIfaceAddr =
-             linkMessage->neighborInterfaceAddresses.begin ();
-           neighIfaceAddr != linkMessage->neighborInterfaceAddresses.end ();
-           neighIfaceAddr++)
-        {
-          NS_LOG_DEBUG ("   -> Neighbor: " << *neighIfaceAddr);
-          if (*neighIfaceAddr == receiverIface)
-            {
-              if (lt == OLSR_LOST_LINK)
-                {
-                  NS_LOG_LOGIC ("link is LOST => expiring it");
-                  link_tuple->symTime = now - Seconds (1);
-                  updated = true;
-                }
-              else if (lt == OLSR_SYM_LINK || lt == OLSR_ASYM_LINK)
-                {
-                  NS_LOG_DEBUG (*link_tuple << ": link is SYM or ASYM => should become SYM now"
-                                " (symTime being increased to " << now + msg.GetVTime ());
-                  link_tuple->symTime = now + msg.GetVTime ();
-                  link_tuple->time = link_tuple->symTime + OLSR_NEIGHB_HOLD_TIME;
-                  updated = true;
-                }
-              else
-                {
-                  NS_FATAL_ERROR ("bad link type");
-                }
-              break;
-            }
-          else
-            {
-              NS_LOG_DEBUG ("     \\-> *neighIfaceAddr (" << *neighIfaceAddr
-                                                          << " != receiverIface (" << receiverIface << ") => IGNORING!");
-            }
-        }
-      NS_LOG_DEBUG ("Link tuple updated: " << int (updated));
+      ProcessLqHelloLinkMessages(link_tuple,  (MessageHeader::LqHello)hello, receiverIface, now,  msg.GetVTime ());
     }
+  else
+    {
+      ProcessHelloLinkMessages(link_tuple,  (MessageHeader::LqHello)hello, receiverIface, now,  msg.GetVTime ());
+    }
+
   link_tuple->time = std::max (link_tuple->time, link_tuple->asymTime);
 
   if (updated)

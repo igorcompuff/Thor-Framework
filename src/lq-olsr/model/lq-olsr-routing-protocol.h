@@ -739,6 +739,32 @@ private:
                    const Ipv4Address &senderIface);
 
   /**
+   * \brief Creates a new link tuple.
+   * \param senderIface the sender's interface address
+   * \param receiverIface the receiver's interface address
+   * \param now the current time
+   * \param vtime the vTime in the message
+   */
+  LinkTuple*
+  CreateNewLinkTuple(const Ipv4Address &senderIface, const Ipv4Address &receiverIface, Time now, Time vtime);
+
+  /**
+   * \brif Log (if enabled) LinkSensing information
+   * \param linkType The type of the link
+   * \param neighborType The type of the neighbor
+   */
+  void
+  LogLinkSensing(int linkType, int neighborType);
+
+  bool
+  ProcessHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::MessageHeader::Hello &hello,
+			   const Ipv4Address &receiverIface, Time now, Time vTime);
+
+  bool
+  ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::MessageHeader::LqHello &lqhello,
+  			   const Ipv4Address &receiverIface, Time now, Time vTime);
+
+  /**
    * \brief Updates Link Set according to a new received HELLO message
    * (following \RFC{3626} specification). Neighbor Set is also updated if needed.
    * \param msg The received message.
