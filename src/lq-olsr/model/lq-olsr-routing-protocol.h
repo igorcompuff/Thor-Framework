@@ -745,8 +745,8 @@ private:
    * \param now the current time
    * \param vtime the vTime in the message
    */
-  LinkTuple*
-  CreateNewLinkTuple(const Ipv4Address &senderIface, const Ipv4Address &receiverIface, Time now, Time vtime);
+  void
+  CreateNewLinkTuple(LinkTuple &newLinkTuple, const Ipv4Address &senderIface, const Ipv4Address &receiverIface, Time now, Time vtime);
 
   /**
    * \brif Log (if enabled) LinkSensing information

@@ -2040,21 +2040,18 @@ RoutingProtocol::UsesNonOlsrOutgoingInterface (const Ipv4RoutingTableEntry &rout
   return ci != m_interfaceExclusions.end ();
 }
 
-LinkTuple*
-RoutingProtocol::CreateNewLinkTuple(const Ipv4Address &senderIface, const Ipv4Address &receiverIface, Time now, Time vtime)
+void
+RoutingProtocol::CreateNewLinkTuple(LinkTuple &newLinkTuple, const Ipv4Address &senderIface, const Ipv4Address &receiverIface, Time now, Time vtime)
 {
-  LinkTuple newLinkTuple;
-
   newLinkTuple.neighborIfaceAddr = senderIface;
   newLinkTuple.localIfaceAddr = receiverIface;
   newLinkTuple.symTime = now - Seconds (1);
-  newLinkTuple.time = now + vtime ();
+  newLinkTuple.time = now + vtime;
 
   if (linkQualityEnabled)
     {
       newLinkTuple.cost = m_metric->GetInfinityCostValue();
     }
-  return &newLinkTuple;
 }
 
 void
@@ -2098,8 +2095,8 @@ RoutingProtocol::LogLinkSensing(int linkType, int neighborType)
 	  }
 
 	NS_LOG_DEBUG ("Looking at HELLO link messages with Link Type "
-		      << lt << " (" << linkTypeName
-		      << ") and Neighbor Type " << nt
+		      << linkType << " (" << linkTypeName
+		      << ") and Neighbor Type " << neighborType
 		      << " (" << neighborTypeName << ")");
   #endif // NS3_LOG_ENABLE
 }
@@ -2146,7 +2143,7 @@ RoutingProtocol::ProcessHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::
                 else if (lt == OLSR_SYM_LINK || lt == OLSR_ASYM_LINK)
                   {
                     NS_LOG_DEBUG (*link_tuple << ": link is SYM or ASYM => should become SYM now"
-                                  " (symTime being increased to " << now + vTime ());
+                                  " (symTime being increased to " << now + vTime);
                     link_tuple->symTime = now + vTime;
                     link_tuple->time = link_tuple->symTime + OLSR_NEIGHB_HOLD_TIME;
                     updated = true;
@@ -2165,6 +2162,8 @@ RoutingProtocol::ProcessHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::
           }
         NS_LOG_DEBUG ("Link tuple updated: " << int (updated));
       }
+
+  return updated;
 }
 
 bool
@@ -2212,7 +2211,7 @@ RoutingProtocol::ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr
                 else if (lt == OLSR_SYM_LINK || lt == OLSR_ASYM_LINK)
                   {
                     NS_LOG_DEBUG (*link_tuple << ": link is SYM or ASYM => should become SYM now"
-                                  " (symTime being increased to " << now + vTime ());
+                                  " (symTime being increased to " << now + vTime);
                     link_tuple->symTime = now + vTime;
                     link_tuple->time = link_tuple->symTime + OLSR_NEIGHB_HOLD_TIME;
                     link_tuple->cost = m_metric->GetCost(neighIfaceInfo->neighborInterfaceAddress);
@@ -2233,6 +2232,7 @@ RoutingProtocol::ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr
           }
         NS_LOG_DEBUG ("Link tuple updated: " << int (updated));
       }
+  return updated;
 }
 
 
@@ -2254,7 +2254,8 @@ RoutingProtocol::LinkSensing (const lqolsr::MessageHeader &msg,
   LinkTuple *link_tuple = m_state.FindLinkTuple (senderIface);
   if (link_tuple == NULL)
     {
-      LinkTuple newLinkTuple = CreateNewLinkTuple(senderIface, receiverIface, now, msg.GetVTime ());
+      LinkTuple newLinkTuple;
+      CreateNewLinkTuple(newLinkTuple, senderIface, receiverIface, now, msg.GetVTime ());
       link_tuple = &m_state.InsertLinkTuple (newLinkTuple);
       created = true;
       NS_LOG_LOGIC ("Existing link tuple did not exist => creating new one");
@@ -2269,11 +2270,13 @@ RoutingProtocol::LinkSensing (const lqolsr::MessageHeader &msg,
 
   if (linkQualityEnabled)
     {
-      ProcessLqHelloLinkMessages(link_tuple,  (MessageHeader::LqHello)hello, receiverIface, now,  msg.GetVTime ());
+
+      const MessageHeader::LqHello* lqhello = dynamic_cast<const MessageHeader::LqHello*>(&hello);
+      updated = ProcessLqHelloLinkMessages(link_tuple, *lqhello , receiverIface, now,  msg.GetVTime ());
     }
   else
     {
-      ProcessHelloLinkMessages(link_tuple,  (MessageHeader::LqHello)hello, receiverIface, now,  msg.GetVTime ());
+      updated = ProcessHelloLinkMessages(link_tuple,  hello, receiverIface, now,  msg.GetVTime ());
     }
 
   link_tuple->time = std::max (link_tuple->time, link_tuple->asymTime);
