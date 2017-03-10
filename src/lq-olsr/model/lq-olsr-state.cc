@@ -169,6 +169,19 @@ namespace lqolsr {
 
   /********** Neighbor 2 Hop Set Manipulation **********/
 
+  void
+  LqOlsrState::FindSameNodeTwoHopNeighbors(const Ipv4Address & twoHopNeighborAddress, TwoHopNeighborSet & sameTwoHopSet)
+  {
+    for (TwoHopNeighborSet::iterator twoHopNeighbor = m_twoHopNeighborSet.begin();
+	 twoHopNeighbor != m_twoHopNeighborSet.end(); twoHopNeighbor++)
+      {
+	if (twoHopNeighbor->twoHopNeighborAddr == twoHopNeighborAddress)
+	  {
+	    sameTwoHopSet.push_back(*twoHopNeighbor);
+	  }
+      }
+  }
+
   TwoHopNeighborTuple*
   LqOlsrState::FindTwoHopNeighborTuple (Ipv4Address const &neighborMainAddr,
                                       Ipv4Address const &twoHopNeighborAddr)
@@ -298,6 +311,42 @@ namespace lqolsr {
   }
 
   /********** Link Set Manipulation **********/
+
+  LinkTuple *
+  LqOlsrState::FindBestLinkToNeighbor(const Ipv4Address & neighborMainAddress, Time now, Ptr<lqmetric::LqAbstractMetric> metric)
+  {
+    LinkTuple* bestLink = NULL;
+    LinkTuple* backupLink = NULL;
+    IfaceAssocTuple* tuple = NULL;
+
+    float currentBestCost = metric->GetInfinityCostValue();
+
+    for (LinkSet::iterator link = m_linkSet.begin(); link != m_linkSet.end(); link++)
+      {
+	tuple = FindIfaceAssocTuple(link->neighborIfaceAddr);
+
+	if (tuple == NULL || tuple->mainAddr != neighborMainAddress)
+	  {
+	    continue;
+	  }
+
+	if (metric->CompareBest(link->cost, currentBestCost) > 0)
+	  {
+	    currentBestCost = link->cost;
+	    if (link->symTime < now)
+	      {
+		backupLink = &(*link);
+	      }
+	    else
+	      {
+		bestLink = &(*link);
+	      }
+	  }
+      }
+
+    return bestLink != NULL ? bestLink : backupLink;
+
+  }
 
   LinkTuple*
   LqOlsrState::FindLinkTuple (Ipv4Address const & ifaceAddr)

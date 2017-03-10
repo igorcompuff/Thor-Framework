@@ -3,6 +3,7 @@
 #define LQ_OLSR_STATE_H
 
 #include "lq-olsr-repositories.h"
+#include "ns3/lq-metric.h"
 
 namespace ns3 {
 namespace lqolsr {
@@ -150,6 +151,15 @@ namespace lqolsr {
     }
 
     /**
+     * Returns a TwoHopNeighborSet collection containing all two-hop neighbors representing the same node in the
+     * topology (in other words, all two-hop neighbors with the same twoHopNeighborAddress)
+     * \param twoHopNeighborAddress The twoHopNeighborAddress used as the criteria to select the two-hop neighbors
+     * \param sameTwoHopSet Collection to which the two-hop neighbors with the same address will be added
+     */
+    void
+    FindSameNodeTwoHopNeighbors(const Ipv4Address & twoHopNeighborAddress, TwoHopNeighborSet & sameTwoHopSet);
+
+    /**
      * Finds a 2-hop neighbor tuple.
      * \param neighbor The neighbor main address.
      * \param twoHopNeighbor The 2-hop neighbor main address.
@@ -234,6 +244,16 @@ namespace lqolsr {
     {
       return m_linkSet;
     }
+
+    /**
+     * Find the LinkTuple with the best cost to a given neighbor
+     * \param neighborMainAddress The main address of the neighbor
+     * \param now The time at which the link should be considered symmetrical
+     * \param metric The metric used to compare the costs
+     */
+    LinkTuple *
+    FindBestLinkToNeighbor(const Ipv4Address & neighborMainAddress, Time now, Ptr<lqmetric::LqAbstractMetric> metric);
+
     /**
      * Finds a link tuple.
      * \param ifaceAddr The interface address of the link.

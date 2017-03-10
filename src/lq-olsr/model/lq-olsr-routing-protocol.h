@@ -345,6 +345,12 @@ private:
   void RecvOlsr (Ptr<Socket> socket);
 
   /**
+   * \brief Computates MPR set of a node considering link quality.
+   */
+  void
+  LqMprComputation ();
+
+  /**
    * \brief Computates MPR set of a node following \RFC{3626} hints.
    */
   void MprComputation ();
@@ -636,6 +642,15 @@ private:
   void AddMprSelectorTuple (const MprSelectorTuple  &tuple);
 
   /**
+     * \brief Creates and Adds an MPR selector tuple to the MPR Selector Set.
+     *
+     * \param selectorAddress Main address of the Mpr selector.
+     * \param vTime The vTime of the received message
+     * \param now The current time
+     */
+    void AddMprSelectorTuple (const Ipv4Address & selectorAddress, Time vTime, Time now);
+
+  /**
    * \brief Removes an MPR selector tuple from the MPR Selector Set.
    * Advertised Neighbor Sequence Number (ANSN) is also updated.
    *
@@ -787,6 +802,12 @@ private:
                             const lqolsr::MessageHeader::Hello &hello);
 
   /**
+   * \brief Shows log information for the PopulateTwoHopNeighborSet and PopulateTwoHopNeighborSetLq methods
+   * \param neighborType the neighbor type of a LinkMessage
+   */
+  void LogPopulateTwoHopNeighborSet(int neighborType);
+
+  /**
    * \brief Updates the 2-hop Neighbor Set according to the information contained
    * in a new received HELLO message (following \RFC{3626}).
    * \param msg The received message.
@@ -796,6 +817,25 @@ private:
                                   const lqolsr::MessageHeader::Hello &hello);
 
   /**
+   * \brief Updates the 2-hop Neighbor Set according to the information contained
+   * in a new received LQ_HELLO message. Works only when link quality is enabled.
+   * \param msg The received message.
+   * \param lqhello The received LQ_HELLO sub-message.
+   */
+    void PopulateTwoHopNeighborSetLq (const lqolsr::MessageHeader &msg,
+                                    const lqolsr::MessageHeader::LqHello &lqhello);
+
+    /**
+     * \brief Updates the MPR Selector Set. This method represents the common case for link quality and traditional olsr
+     * \param nbIntAddresses The interface addresses announced in the HELLO or LQ_HELLO messages
+     * \param originatorAddress The main address of the originator of the HELLO or LQ_HELLO message
+     * \param vTime The vTime of the message
+     * \param now The current time
+     */
+    void PopulateMprSelectorSetCommon (const std::vector<Ipv4Address> & nbIntAddresses,
+				  const Ipv4Address & originatorAddress, Time vTime, Time now );
+
+   /**
    * \brief Updates the MPR Selector Set according to the information contained in
    * a new received HELLO message (following \RFC{3626}).
    * \param msg The received message.

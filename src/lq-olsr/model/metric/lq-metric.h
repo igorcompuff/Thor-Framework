@@ -51,9 +51,14 @@ public:
     static TypeId GetTypeId (void);
 
     /*
-     * Gets the cost of the link/path to the specified ifaddress
+     * Gets the cost of the link to the specified neighbor ifaddress
      */
     virtual float GetCost(const Ipv4Address & neighborIfaceAddress) const = 0;
+
+    /*
+     * Gets the cost calculated based on the specified metricInfo
+     */
+    virtual float GetCost(uint32_t metricInfo) = 0;
 
     virtual uint32_t GetMetricInfo(const Ipv4Address & neighborIfaceAddress) const = 0;
 
@@ -79,7 +84,7 @@ public:
      * link/path of the same quality.
      *
     */
-    virtual int CompareBest(double cost1, double cost2) = 0;
+    virtual int CompareBest(float cost1, float cost2) = 0;
 
     /*
      * When computing the cost of a path, we need to calculate the resulting cost from a
@@ -90,7 +95,7 @@ public:
      * two costs.
      *
     */
-    virtual double CompoundMetrics(double cost1, double cost2) = 0;
+    virtual float Compound(float cost1, float cost2) = 0;
 };
 
 
