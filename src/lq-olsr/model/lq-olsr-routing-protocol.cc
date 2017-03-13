@@ -1409,6 +1409,115 @@ RoutingProtocol::ProcessHello (const lqolsr::MessageHeader &msg,
 }
 
 void
+RoutingProtocol::CreateTopologyTuple(TopologyTuple & tuple, const Ipv4Address & destAddress,
+				     const Ipv4Address & lastAddress, uint16_t seqNumber, Time expirationTime)
+{
+  TopologyTuple topologyTuple;
+  topologyTuple.destAddr = destAddress;
+  topologyTuple.lastAddr = lastAddress;
+  topologyTuple.sequenceNumber = seqNumber;
+  topologyTuple.expirationTime = expirationTime;
+  AddTopologyTuple (topologyTuple);
+}
+
+void
+RoutingProtocol::ContinueProcessingLqTc(const MessageHeader::LqTc & lqtc, const Ipv4Address & originAddress,
+					Time expirationTime )
+{
+  // 4. For each of the advertised neighbor interface information received in
+  // the TC message:
+
+  for (std::vector<MessageHeader::NeighborInterfaceInfo>::const_iterator info = lqtc.neighborAddresses.begin();
+      info != lqtc.neighborAddresses.end(); info++)
+    {
+      const Ipv4Address &addr = info->neighborInterfaceAddress;
+
+      // 4.1. If there exist some tuple in the topology set where:
+      //      T_dest_addr == advertised neighbor main address, AND
+      //      T_last_addr == originator address,
+      // then the holding time of that tuple MUST be set to:
+      //      T_time      =  current time + validity time.
+
+      TopologyTuple *topologyTuple = m_state.FindTopologyTuple (addr, originAddress);
+
+      if (topologyTuple != NULL)
+      	{
+      	  topologyTuple->expirationTime = expirationTime;
+      	  topologyTuple->cost = unpack754_32(info->metricInfo);
+      	}
+      else
+      	{
+	  // 4.2. Otherwise, a new tuple MUST be recorded in the topology
+	  // set where:
+	  //      T_dest_addr = advertised neighbor main address,
+	  //      T_last_addr = originator address,
+	  //      T_seq       = ANSN,
+	  //      T_time      = current time + validity time.
+
+	  TopologyTuple topologyTuple;
+
+	  CreateTopologyTuple(topologyTuple, addr, originAddress, lqtc.ansn, expirationTime);
+	  topologyTuple.cost = unpack754_32(info->metricInfo);
+
+	  AddTopologyTuple (topologyTuple);
+
+	  // Schedules topology tuple deletion
+	  m_events.Track (Simulator::Schedule (DELAY (topologyTuple.expirationTime),
+					       &RoutingProtocol::TopologyTupleTimerExpire,
+					       this,
+					       topologyTuple.destAddr,
+					       topologyTuple.lastAddr));
+      	}
+    }
+}
+
+void
+RoutingProtocol::ContinueProcessingTc(const MessageHeader::Tc & tc, const Ipv4Address & originAddress,
+				      Time expirationTime )
+{
+  // 4. For each of the advertised neighbor main address received in
+  // the TC message:
+  for (std::vector<Ipv4Address>::const_iterator i = tc.neighborAddresses.begin ();
+       i != tc.neighborAddresses.end (); i++)
+    {
+      const Ipv4Address &addr = *i;
+      // 4.1. If there exist some tuple in the topology set where:
+      //      T_dest_addr == advertised neighbor main address, AND
+      //      T_last_addr == originator address,
+      // then the holding time of that tuple MUST be set to:
+      //      T_time      =  current time + validity time.
+      TopologyTuple *topologyTuple =
+	m_state.FindTopologyTuple (addr, originAddress);
+
+      if (topologyTuple != NULL)
+	{
+	  topologyTuple->expirationTime = expirationTime;
+	}
+      else
+	{
+	  // 4.2. Otherwise, a new tuple MUST be recorded in the topology
+	  // set where:
+	  //      T_dest_addr = advertised neighbor main address,
+	  //      T_last_addr = originator address,
+	  //      T_seq       = ANSN,
+	  //      T_time      = current time + validity time.
+	  TopologyTuple topologyTuple;
+
+	  CreateTopologyTuple(topologyTuple, addr, originAddress, tc.ansn, expirationTime);
+
+	  AddTopologyTuple (topologyTuple);
+
+	  // Schedules topology tuple deletion
+	  m_events.Track (Simulator::Schedule (DELAY (topologyTuple.expirationTime),
+					       &RoutingProtocol::TopologyTupleTimerExpire,
+					       this,
+					       topologyTuple.destAddr,
+					       topologyTuple.lastAddr));
+	}
+    }
+}
+
+void
 RoutingProtocol::ProcessTc (const lqolsr::MessageHeader &msg,
                             const Ipv4Address &senderIface)
 {
@@ -1428,8 +1537,8 @@ RoutingProtocol::ProcessTc (const lqolsr::MessageHeader &msg,
   //    T_seq       >  ANSN,
   // then further processing of this TC message MUST NOT be
   // performed.
-  const TopologyTuple *topologyTuple =
-    m_state.FindNewerTopologyTuple (msg.GetOriginatorAddress (), tc.ansn);
+  const TopologyTuple *topologyTuple = m_state.FindNewerTopologyTuple (msg.GetOriginatorAddress (), tc.ansn);
+
   if (topologyTuple != NULL)
     {
       return;
@@ -1441,61 +1550,29 @@ RoutingProtocol::ProcessTc (const lqolsr::MessageHeader &msg,
   // MUST be removed from the topology set.
   m_state.EraseOlderTopologyTuples (msg.GetOriginatorAddress (), tc.ansn);
 
-  // 4. For each of the advertised neighbor main address received in
-  // the TC message:
-  for (std::vector<Ipv4Address>::const_iterator i = tc.neighborAddresses.begin ();
-       i != tc.neighborAddresses.end (); i++)
+  if (linkQualityEnabled)
     {
-      const Ipv4Address &addr = *i;
-      // 4.1. If there exist some tuple in the topology set where:
-      //      T_dest_addr == advertised neighbor main address, AND
-      //      T_last_addr == originator address,
-      // then the holding time of that tuple MUST be set to:
-      //      T_time      =  current time + validity time.
-      TopologyTuple *topologyTuple =
-        m_state.FindTopologyTuple (addr, msg.GetOriginatorAddress ());
-
-      if (topologyTuple != NULL)
-        {
-          topologyTuple->expirationTime = now + msg.GetVTime ();
-        }
-      else
-        {
-          // 4.2. Otherwise, a new tuple MUST be recorded in the topology
-          // set where:
-          //      T_dest_addr = advertised neighbor main address,
-          //      T_last_addr = originator address,
-          //      T_seq       = ANSN,
-          //      T_time      = current time + validity time.
-          TopologyTuple topologyTuple;
-          topologyTuple.destAddr = addr;
-          topologyTuple.lastAddr = msg.GetOriginatorAddress ();
-          topologyTuple.sequenceNumber = tc.ansn;
-          topologyTuple.expirationTime = now + msg.GetVTime ();
-          AddTopologyTuple (topologyTuple);
-
-          // Schedules topology tuple deletion
-          m_events.Track (Simulator::Schedule (DELAY (topologyTuple.expirationTime),
-                                               &RoutingProtocol::TopologyTupleTimerExpire,
-                                               this,
-                                               topologyTuple.destAddr,
-                                               topologyTuple.lastAddr));
-        }
+      const MessageHeader::LqTc * lqtc = dynamic_cast<const MessageHeader::LqTc *>(&tc);
+      ContinueProcessingLqTc(*lqtc, msg.GetOriginatorAddress(), msg.GetVTime() + now);
+    }
+  else
+    {
+      ContinueProcessingTc(tc, msg.GetOriginatorAddress(), msg.GetVTime() + now);
     }
 
-#ifdef NS3_LOG_ENABLE
-  {
-    const TopologySet &topology = m_state.GetTopologySet ();
-    NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
-                  << "s ** BEGIN dump TopologySet for OLSR Node " << m_mainAddress);
-    for (TopologySet::const_iterator tuple = topology.begin ();
-         tuple != topology.end (); tuple++)
-      {
-        NS_LOG_DEBUG (*tuple);
-      }
-    NS_LOG_DEBUG ("** END dump TopologySet Set for OLSR Node " << m_mainAddress);
-  }
-#endif // NS3_LOG_ENABLE
+  #ifdef NS3_LOG_ENABLE
+    {
+      const TopologySet &topology = m_state.GetTopologySet ();
+      NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+		    << "s ** BEGIN dump TopologySet for OLSR Node " << m_mainAddress);
+      for (TopologySet::const_iterator tuple = topology.begin ();
+	   tuple != topology.end (); tuple++)
+	{
+	  NS_LOG_DEBUG (*tuple);
+	}
+      NS_LOG_DEBUG ("** END dump TopologySet Set for OLSR Node " << m_mainAddress);
+    }
+  #endif // NS3_LOG_ENABLE
 }
 
 void

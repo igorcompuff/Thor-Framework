@@ -715,6 +715,32 @@ private:
                      const Ipv4Address &senderIface);
 
   /**
+   * \brief Creates a new topology tuple
+   * \param tuple The topology tuple to be created
+   * \param destAddress The destination address
+   * \param lastAddress The address of the node just before the destination node
+   */
+  void CreateTopologyTuple(TopologyTuple & tuple, const Ipv4Address & destAddress,
+			   const Ipv4Address & lastAddress, uint16_t seqNumber, Time expirationTime);
+  /**
+   * \brief Continue processing a LqTc message considering link quality metric.
+   * \param lqtc The LQ_TC message header
+   * \param originAddress The message originator address
+   * \param  expirationTime The expiration time to be associated with the topology tuples
+   */
+  void ContinueProcessingLqTc(const MessageHeader::LqTc & lqtc, const Ipv4Address & originAddress,
+			      Time expirationTime );
+
+  /**
+   * \brief Continue processing a TC message following \RFC{3626} specification.
+   * \param tc The TC message header
+   * \param originAddress The message originator address
+   * \param  expirationTime The expiration time to be associated with the topology tuples
+   */
+  void ContinueProcessingTc(const MessageHeader::Tc & tc, const Ipv4Address & originAddress,
+			    Time expirationTime );
+
+  /**
    * \brief Processes a TC message following \RFC{3626} specification.
    *
    * The Topology Set is updated (if needed) with the information of

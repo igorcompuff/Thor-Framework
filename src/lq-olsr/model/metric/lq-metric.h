@@ -69,7 +69,7 @@ public:
 
     /*
      * Notifies the metric about the reception of a message, so it can take the appropriate
-     * action.
+     * actions.
      */
     virtual void NotifyMessageReceived(const MessageHeader& header) = 0;
 

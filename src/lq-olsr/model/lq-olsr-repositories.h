@@ -207,7 +207,8 @@ namespace lqolsr {
   {
     return (a.destAddr == b.destAddr
             && a.lastAddr == b.lastAddr
-            && a.sequenceNumber == b.sequenceNumber);
+            && a.sequenceNumber == b.sequenceNumber
+	    && a.cost == b.cost);
   }
 
   static inline std::ostream&
@@ -217,6 +218,7 @@ namespace lqolsr {
        << ", lastAddr=" << tuple.lastAddr
        << ", sequenceNumber=" << (int) tuple.sequenceNumber
        << ", expirationTime=" << tuple.expirationTime
+       << ", cost=" << tuple.cost
        << ")";
     return os;
   }
