@@ -63,7 +63,7 @@ struct RoutingTableEntry
   Ipv4Address nextAddr; //!< Address of the next hop.
   uint32_t interface; //!< Interface index
   uint32_t distance; //!< Distance in hops to the destination.
-  double cost; //!< Cost to the destination.
+  float cost; //!< Cost to the destination.
 
   RoutingTableEntry () : // default values
     destAddr (), nextAddr (),
@@ -239,6 +239,25 @@ private:
    * \param dest address of the destination node.
    */
   void RemoveEntry (const Ipv4Address &dest);
+
+  uint32_t
+  GetInterfaceNumberByAddress(const Ipv4Address & intAddress);
+
+  /**
+   * \brief Adds a new entry into the routing table.
+   *
+   * If an entry for the given destination existed, it is deleted and freed.
+   *
+   * \param dest address of the destination node.
+   * \param next address of the next hop node.
+   * \param interface address of the local interface.
+   * \param cost cost to the destination node.
+   */
+    void AddLqEntry (const Ipv4Address &dest,
+                   const Ipv4Address &next,
+                   uint32_t interface,
+                   float cost);
+
   /**
    * \brief Adds a new entry into the routing table.
    *
@@ -253,6 +272,22 @@ private:
                  const Ipv4Address &next,
                  uint32_t interface,
                  uint32_t distance);
+
+  /**
+   * \brief Adds a new entry into the routing table.
+   *
+   * If an entry for the given destination existed, an error is thrown.
+   *
+   * \param dest address of the destination node.
+   * \param next address of the next hop node.
+   * \param interfaceAddress address of the local interface.
+   * \param cost cost to the destination node.
+   */
+    void AddLqEntry (const Ipv4Address &dest,
+                   const Ipv4Address &next,
+                   const Ipv4Address &interfaceAddress,
+                   float cost);
+
   /**
    * \brief Adds a new entry into the routing table.
    *
@@ -267,6 +302,9 @@ private:
                  const Ipv4Address &next,
                  const Ipv4Address &interfaceAddress,
                  uint32_t distance);
+
+  bool
+  UpdateEntry(Ipv4Address const &dest, Ipv4Address const &next, const Ipv4Address & interfaceAddress, float cost);
 
   /**
    * \brief Looks up an entry for the specified destination address.
@@ -354,6 +392,12 @@ private:
    * \brief Computates MPR set of a node following \RFC{3626} hints.
    */
   void MprComputation ();
+
+  /**
+   * \brief Creates the routing table of the node following \RFC{3626} hints.
+   */
+  void LqRoutingTableComputation ();
+
 
   /**
    * \brief Creates the routing table of the node following \RFC{3626} hints.
