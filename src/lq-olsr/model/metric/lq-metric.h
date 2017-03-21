@@ -96,6 +96,8 @@ public:
      *
     */
     virtual float Compound(float cost1, float cost2) = 0;
+
+    virtual float Decompound(float compoundedCost, float partialCost) = 0;
 };
 
 

@@ -198,7 +198,7 @@ namespace lqolsr {
     /// Time at which this tuple expires and must be removed.
     Time expirationTime;
     ///Cost to destAddr
-    double cost;
+    float cost;
 
   };
 

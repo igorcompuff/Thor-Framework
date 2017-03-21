@@ -544,7 +544,14 @@ RoutingProtocol::RecvOlsr (Ptr<Socket> socket)
     }
 
   // After processing all OLSR messages, we must recompute the routing table
-  RoutingTableComputation ();
+  if (linkQualityEnabled)
+    {
+      LqRoutingTableComputation();
+    }
+  else
+    {
+      RoutingTableComputation ();
+    }
 }
 
 ///
@@ -1027,115 +1034,178 @@ RoutingProtocol::GetMainAddress (Ipv4Address iface_addr) const
 }
 
 void
-RoutingProtocol::LqRoutingTableComputation()
+RoutingProtocol::InitializeDestinations(Time now)
 {
-  Time now = Simulator::Now ();
-  NS_LOG_DEBUG (now.GetSeconds () << " s: Node " << m_mainAddress
-                                                  << ": LqRoutingTableComputation begin...");
-  // 1. All the entries from the routing table are removed.
-  Clear ();
-  const NeighborSet &neighborSet = m_state.GetNeighbors ();
+  bool mainAddrSelected = false;
+  RoutingTableEntry entry;
 
+  const NeighborSet &neighborSet = m_state.GetNeighbors ();
   for (NeighborSet::const_iterator it = neighborSet.begin (); it != neighborSet.end (); it++)
     {
-      NeighborTuple const &nb_tuple = *it;
-      NS_LOG_DEBUG ("Looking at neighbor tuple: " << nb_tuple);
-
-      if (nb_tuple.status == NeighborTuple::STATUS_SYM)
+      if (it->neighborMainAddr == m_mainAddress)
 	{
-	  bool nb_main_addr = false;
-	  const LinkTuple *lt = NULL;
-	  const LinkSet &linkSet = m_state.GetLinks ();
-	  for (LinkSet::const_iterator it2 = linkSet.begin ();
-	       it2 != linkSet.end (); it2++)
-	    {
-	      LinkTuple const &link_tuple = *it2;
-	      NS_LOG_DEBUG ("Looking at link tuple: " << link_tuple
-						      << (link_tuple.time >= Simulator::Now () ? "" : " (expired)"));
-	      if ((GetMainAddress (link_tuple.neighborIfaceAddr) == nb_tuple.neighborMainAddr)
-		  && link_tuple.time >= Simulator::Now ())
-		{
-		  NS_LOG_LOGIC ("Link tuple matches neighbor " << nb_tuple.neighborMainAddr
-							       << " => adding routing table entry to neighbor");
-		  lt = &link_tuple;
-		  AddEntry (link_tuple.neighborIfaceAddr,
-			    link_tuple.neighborIfaceAddr,
-			    link_tuple.localIfaceAddr,
-			    link_tuple.cost);
-		  if (link_tuple.neighborIfaceAddr == nb_tuple.neighborMainAddr)
-		    {
-		      nb_main_addr = true;
-		    }
-		}
-	      else
-		{
-		  NS_LOG_LOGIC ("Link tuple: linkMainAddress= " << GetMainAddress (link_tuple.neighborIfaceAddr)
-								<< "; neighborMainAddr =  " << nb_tuple.neighborMainAddr
-								<< "; expired=" << int (link_tuple.time < Simulator::Now ())
-								<< " => IGNORE");
-		}
-	    }
+	  continue;
+	}
 
-	  // If, in the above, no R_dest_addr is equal to the main
-	  // address of the neighbor, then another new routing entry
-	  // with MUST be added, with:
-	  //      R_dest_addr  = main address of the neighbor;
-	  //      R_next_addr  = L_neighbor_iface_addr of one of the
-	  //                     associated link tuple with L_time >= current time;
-	  //      R_dist       = 1;
-	  //      R_iface_addr = L_local_iface_addr of the
-	  //                     associated link tuple.
-	  if (!nb_main_addr && lt != NULL)
+      if (it->status == NeighborTuple::STATUS_SYM)
+	{
+	  const LinkSet &linkSet = m_state.GetLinks ();
+
+	  entry.destAddr = Ipv4Address::GetBroadcast();
+
+	  for (LinkSet::const_iterator it2 = linkSet.begin (); it2 != linkSet.end (); it2++)
+	  {
+	    if ((GetMainAddress (it2->neighborIfaceAddr) == it->neighborMainAddr)
+				  && it2->time >= Simulator::Now ())
+	      {
+		entry = CreateLqEntry(it2->neighborIfaceAddr, it2->neighborIfaceAddr, it2->localIfaceAddr, it2->cost);
+		m_destinations[it2->neighborIfaceAddr] = entry;
+
+	      }
+
+	    if (it2->neighborIfaceAddr == it->neighborMainAddr)
+	      {
+		mainAddrSelected = true;
+	      }
+	  }
+
+	  if (!mainAddrSelected && entry.destAddr != Ipv4Address::GetBroadcast())
 	    {
-	      NS_LOG_LOGIC ("no R_dest_addr is equal to the main address of the neighbor "
-			    "=> adding additional routing entry");
-	      AddEntry (nb_tuple.neighborMainAddr,
-			lt->neighborIfaceAddr,
-			lt->localIfaceAddr,
-			lt->cost);
+	      entry.destAddr = it->neighborMainAddr;
+	      m_destinations[it->neighborMainAddr] = entry;
 	    }
 	}
     }
 
   const TwoHopNeighborSet &twoHopNeighbors = m_state.GetTwoHopNeighbors ();
-  for (TwoHopNeighborSet::const_iterator it = twoHopNeighbors.begin ();
-       it != twoHopNeighbors.end (); it++)
+  for (TwoHopNeighborSet::const_iterator two_neigh = twoHopNeighbors.begin ();
+      two_neigh != twoHopNeighbors.end (); two_neigh++)
     {
-      TwoHopNeighborTuple const &nb2hop_tuple = *it;
-
-      NS_LOG_LOGIC ("Looking at two-hop neighbor tuple: " << nb2hop_tuple);
-
-      if (nb2hop_tuple.twoHopNeighborAddr == m_mainAddress)
+      if (m_destinations.find(two_neigh->twoHopNeighborAddr) == m_destinations.end())
 	{
-	  NS_LOG_LOGIC ("Two-hop neighbor is self; skipped.");
-	  continue;
+	  entry = CreateLqEntry(two_neigh->twoHopNeighborAddr, two_neigh->neighborMainAddr, Ipv4Address::GetLoopback(),
+				m_metric->GetInfinityCostValue());
+	  m_destinations[two_neigh->twoHopNeighborAddr] = entry;
 	}
+    }
 
-      const NeighborTuple* foundNeighbor = m_state.FindSymNeighborTuple (nb2hop_tuple.twoHopNeighborAddr);
+  const TopologySet &topology = m_state.GetTopologySet ();
+  for (TopologySet::const_iterator top = topology.begin ();
+      top != topology.end (); top++)
+    {
+      if (m_destinations.find(top->lastAddr) == m_destinations.end())
+      	{
+	  entry = CreateLqEntry(top->lastAddr, top->lastAddr, Ipv4Address::GetLoopback(),
+	  			m_metric->GetInfinityCostValue());
+	  m_destinations[top->lastAddr] = entry;
+      	}
 
-      if (foundNeighbor != NULL)
+      if (m_destinations.find(top->destAddr) == m_destinations.end())
 	{
-	  LinkTuple* bestLink = m_state.FindBestLinkToNeighbor(foundNeighbor->neighborMainAddr, now, m_metric);
-	  LinkTuple* bestLinkTwoHop = m_state.FindBestLinkToNeighbor(nb2hop_tuple.neighborMainAddr, now, m_metric);
+	  entry = CreateLqEntry(top->destAddr, top->destAddr, Ipv4Address::GetLoopback(),
+	  	  		m_metric->GetInfinityCostValue());
+	  m_destinations[top->destAddr] = entry;
+	}
+    }
+}
 
-	  if (bestLink == NULL)
+RoutingTableEntry*
+RoutingProtocol::EvaluateNextDestination()
+{
+  std::map<Ipv4Address, RoutingTableEntry>::iterator bestPosition = m_destinations.end();
+  RoutingTableEntry *dest = NULL;
+  for(std::map<Ipv4Address, RoutingTableEntry>::iterator it = m_destinations.begin();
+      it != m_destinations.end(); it++)
+    {
+      if (bestPosition == m_destinations.end() || m_metric->CompareBest(it->second.cost, bestPosition->second.cost) > 0)
+      {
+	bestPosition = it;
+      }
+    }
+
+  if (bestPosition != m_destinations.end())
+    {
+      dest = &bestPosition->second;
+
+      m_destinations.erase(bestPosition);
+    }
+  else
+    {
+      dest = NULL;
+    }
+
+  return dest;
+}
+
+void
+RoutingProtocol::GetDestinationNeighbors(const Ipv4Address & dest, float costToDest, std::vector<AdjacentTuple> & adsjacents)
+{
+  const TwoHopNeighborSet &twoHopNeighbors = m_state.GetTwoHopNeighbors ();
+  AdjacentTuple adjTuple;
+
+  for (TwoHopNeighborSet::const_iterator two_neigh = twoHopNeighbors.begin ();
+      two_neigh != twoHopNeighbors.end (); two_neigh++)
+    {
+      if (two_neigh->neighborMainAddr == dest)
+	{
+	  adjTuple.addr = two_neigh->twoHopNeighborAddr;
+	  adjTuple.cost = m_metric->Decompound(two_neigh->cost, costToDest);
+	  adsjacents.push_back(adjTuple);
+	}
+    }
+
+  const TopologySet &topology = m_state.GetTopologySet ();
+  for (TopologySet::const_iterator top = topology.begin ();
+      top != topology.end (); top++)
+    {
+      if (top->lastAddr == dest)
+	{
+	  adjTuple.addr = top->destAddr;
+	  adjTuple.cost = top->cost;
+	  adsjacents.push_back(adjTuple);
+	}
+    }
+}
+
+void
+RoutingProtocol::LqRoutingTableComputation()
+{
+  Time now = Simulator::Now ();
+  std::vector<AdjacentTuple> adj;
+  InitializeDestinations(now);
+
+  bool done = false;
+
+  while (!done)
+    {
+      RoutingTableEntry *nextDest = EvaluateNextDestination();
+
+      if (nextDest == NULL)
+	{
+	  done = true;
+	}
+      else
+	{
+	  AddLqEntry(nextDest->destAddr, nextDest->nextAddr, nextDest->interface, nextDest->cost);
+
+	  GetDestinationNeighbors(nextDest->destAddr, nextDest->cost, adj);
+
+	  for (std::vector<AdjacentTuple>::const_iterator it = adj.begin(); it != adj.end(); it++)
 	    {
-	      continue;
+		if (m_destinations.find(it->addr) == m_destinations.end())
+		  {
+		    continue;
+		  }
+
+		RoutingTableEntry * entry = &m_destinations[it->addr];
+
+		float newCost = m_metric->Compound(nextDest->cost, entry->cost);
+
+		entry->cost = m_metric->CompareBest(newCost, entry->cost) > 0 ? newCost : entry->cost;
 	    }
-
-	  if (m_metric->CompareBest(nb2hop_tuple.cost, bestLink->cost) > 0)
-	    {
-	      UpdateEntry(nb2hop_tuple.twoHopNeighborAddr, nb2hop_tuple.neighborMainAddr, bestLinkTwoHop->localIfaceAddr,
-			  nb2hop_tuple.cost);
-	    }
-
-
-	  NS_LOG_LOGIC ("Two-hop neighbor tuple is also neighbor; skipped.");
-	  continue;
 	}
 
     }
-
 }
 
 void
@@ -2520,7 +2590,7 @@ RoutingProtocol::ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr
                                   " (symTime being increased to " << now + vTime);
                     link_tuple->symTime = now + vTime;
                     link_tuple->time = link_tuple->symTime + OLSR_NEIGHB_HOLD_TIME;
-                    link_tuple->cost = m_metric->GetCost(neighIfaceInfo->neighborInterfaceAddress);
+                    link_tuple->cost = m_metric->GetCost(link_tuple->neighborIfaceAddr);
                     updated = true;
                   }
                 else
@@ -3060,7 +3130,7 @@ RoutingProtocol::NeighborLoss (const LinkTuple &tuple)
   if (linkQualityEnabled)
     {
       LqMprComputation ();
-      RoutingTableComputation ();
+      LqRoutingTableComputation ();
     }
   else
     {
@@ -3815,6 +3885,24 @@ RoutingProtocol::GetInterfaceNumberByAddress(const Ipv4Address & intAddress)
       }
 
   return interface;
+}
+
+
+RoutingTableEntry
+RoutingProtocol::CreateLqEntry (Ipv4Address const &dest,
+                           Ipv4Address const &next,
+			   Ipv4Address const &interfaceAddress,
+                           float cost)
+{
+  RoutingTableEntry entry;
+
+  entry.destAddr = dest;
+  entry.nextAddr = next;
+  entry.interface = GetInterfaceNumberByAddress(interfaceAddress);
+  entry.distance = 0;
+  entry.cost = cost;
+
+  return entry;
 }
 
 void

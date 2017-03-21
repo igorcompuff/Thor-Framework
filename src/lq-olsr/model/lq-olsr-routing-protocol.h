@@ -72,6 +72,17 @@ struct RoutingTableEntry
   }
 };
 
+struct AdjacentTuple
+{
+  Ipv4Address addr; //!< Address of the destination node.
+  float cost; //!< Cost to the destination.
+
+  AdjacentTuple () : // default values
+    addr (), cost(0)
+  {
+  }
+};
+
 class RoutingProtocol;
 
 ///
@@ -200,6 +211,7 @@ protected:
   virtual void DoInitialize (void);
 private:
   std::map<Ipv4Address, RoutingTableEntry> m_table; //!< Data structure for the routing table.
+  std::map<Ipv4Address, RoutingTableEntry> m_destinations;
 
   Ptr<Ipv4StaticRouting> m_hnaRoutingTable; //!< Routing table for HNA routes
 
@@ -242,6 +254,9 @@ private:
 
   uint32_t
   GetInterfaceNumberByAddress(const Ipv4Address & intAddress);
+
+  RoutingTableEntry
+  CreateLqEntry (Ipv4Address const &dest, Ipv4Address const &next, Ipv4Address const &interfaceAddress, float cost);
 
   /**
    * \brief Adds a new entry into the routing table.
@@ -392,6 +407,15 @@ private:
    * \brief Computates MPR set of a node following \RFC{3626} hints.
    */
   void MprComputation ();
+
+  void
+  InitializeDestinations(Time now);
+
+  RoutingTableEntry*
+  EvaluateNextDestination();
+
+  void
+  GetDestinationNeighbors(const Ipv4Address & dest, float costToDest, std::vector<AdjacentTuple> & adsjacents);
 
   /**
    * \brief Creates the routing table of the node following \RFC{3626} hints.
