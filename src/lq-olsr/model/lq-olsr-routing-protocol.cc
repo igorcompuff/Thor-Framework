@@ -49,6 +49,8 @@
 #include "ns3/trace-source-accessor.h"
 #include "ns3/ipv4-header.h"
 
+#include <algorithm>
+
 /********** Useful macros **********/
 
 ///
@@ -373,6 +375,61 @@ void RoutingProtocol::DoInitialize ()
       NS_LOG_DEBUG ("OLSR on node " << m_mainAddress << " started on mode" <<
 		    (linkQualityEnabled ? " link-quality" : " Hop count") );
     }
+}
+
+std::vector<Ipv4Address>
+RoutingProtocol::getNeighborsOf(const Ipv4Address & dst)
+{
+  std::vector<Ipv4Address> neighbors;
+
+  for (TwoHopNeighborSet::const_iterator it = m_state.GetTwoHopNeighbors ().begin ();
+         it != m_state.GetTwoHopNeighbors ().end (); it++)
+      {
+	if (it->twoHopNeighborAddr == dst && std::find(neighbors.begin(),
+						       neighbors.end(),
+						       it->neighborMainAddr) == neighbors.end())
+	  {
+
+	    neighbors.push_back(it->neighborMainAddr);
+	  }
+      }
+
+  const TopologySet &topology = m_state.GetTopologySet ();
+  for (TopologySet::const_iterator top = topology.begin ();
+      top != topology.end (); top++)
+    {
+      if (top->destAddr == dst && std::find(neighbors.begin(),
+					       neighbors.end(),
+					       top->lastAddr) == neighbors.end())
+	{
+	  neighbors.push_back(top->lastAddr);
+	}
+    }
+
+  return neighbors;
+
+}
+
+lqmetric::LqAbstractMetric::MetricType
+RoutingProtocol::getMetricType()
+{
+  if (linkQualityEnabled)
+    {
+      return m_metric->GetMetricType();
+    }
+
+  return lqmetric::LqAbstractMetric::MetricType::NOT_DEF;
+}
+
+float
+RoutingProtocol::getCostTo(const Ipv4Address & dst)
+{
+  if (m_table.find(dst) != m_table.end())
+    {
+      return m_table[dst].cost;
+    }
+
+  return -1;
 }
 
 void RoutingProtocol::SetMainInterface (uint32_t interface)
@@ -3637,14 +3694,16 @@ RoutingProtocol::Lookup (Ipv4Address const &dest,
                          RoutingTableEntry &outEntry) const
 {
   // Get the iterator at "dest" position
-  std::map<Ipv4Address, RoutingTableEntry>::const_iterator it =
-    m_table.find (dest);
+  std::map<Ipv4Address, RoutingTableEntry>::const_iterator it = m_table.find (dest);
+
   // If there is no route to "dest", return NULL
   if (it == m_table.end ())
     {
       return false;
     }
+
   outEntry = it->second;
+
   return true;
 }
 
@@ -3674,6 +3733,7 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDe
   if (Lookup (header.GetDestination (), entry1) != 0)
     {
       bool foundSendEntry = FindSendEntry (entry1, entry2);
+
       if (!foundSendEntry)
         {
           NS_FATAL_ERROR ("FindSendEntry failure");
@@ -3692,8 +3752,10 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDe
           sockerr = Socket::ERROR_NOROUTETOHOST;
           return rtentry;
         }
+
       rtentry = Create<Ipv4Route> ();
       rtentry->SetDestination (header.GetDestination ());
+
       // the source address is the interface address that matches
       // the destination address (when multiple are present on the
       // outgoing interface, one is selected via scoping rules)
@@ -3701,6 +3763,7 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDe
       uint32_t numOifAddresses = m_ipv4->GetNAddresses (interfaceIdx);
       NS_ASSERT (numOifAddresses > 0);
       Ipv4InterfaceAddress ifAddr;
+
       if (numOifAddresses == 1)
         {
           ifAddr = m_ipv4->GetAddress (interfaceIdx, 0);
@@ -3710,6 +3773,7 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDe
           /// \todo Implment IP aliasing and OLSR
           NS_FATAL_ERROR ("XXX Not implemented yet:  IP aliasing and OLSR");
         }
+
       rtentry->SetSource (ifAddr.GetLocal ());
       rtentry->SetGateway (entry2.nextAddr);
       rtentry->SetOutputDevice (m_ipv4->GetNetDevice (interfaceIdx));

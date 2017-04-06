@@ -104,6 +104,9 @@ public:
   RoutingProtocol ();
   virtual ~RoutingProtocol ();
 
+  std::vector<Ipv4Address> getNeighborsOf(const Ipv4Address & dst);
+  lqmetric::LqAbstractMetric::MetricType getMetricType();
+  float getCostTo(const Ipv4Address & dst);
   /**
    * \brief Set the OLSR main address to the first address on the indicated interface.
    *

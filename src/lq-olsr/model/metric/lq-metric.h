@@ -42,6 +42,13 @@ class LqAbstractMetric: public Object
 {
 public:
 
+    enum MetricType
+      {
+	BETTER_LOWER = 1,
+	BETTER_HIGHER    = 2,
+	NOT_DEF    = 3,
+      };
+
     //Constructors and destructors
     LqAbstractMetric ();
     virtual ~LqAbstractMetric ();
@@ -98,6 +105,8 @@ public:
     virtual float Compound(float cost1, float cost2) = 0;
 
     virtual float Decompound(float compoundedCost, float partialCost) = 0;
+
+    virtual MetricType GetMetricType() = 0;
 };
 
 
