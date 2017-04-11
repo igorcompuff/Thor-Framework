@@ -95,7 +95,7 @@ public:
    *          should be modified to use a fixed stream
    * \return the number of stream indices assigned by this helper
    */
-  int64_t AssignStreams (NodeContainer c, int64_t stream);
+  virtual int64_t AssignStreams (NodeContainer c, int64_t stream);
 
 private:
   /**

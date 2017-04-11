@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
-#ifndef DDSA_H
-#define DDSA_H
+#ifndef DDSA_ROUTING_PROTOCOL_H
+#define DDSA_ROUTING_PROTOCOL_H
 
 #include "ns3/lq-olsr-routing-protocol.h"
 #include "ns3/simulator.h"
@@ -26,7 +26,7 @@ namespace ns3 {
       bool operator==(const Dap& rhs){ return (address == rhs.address); }
     };
 
-    class DdsaAdapter : public ns3::lqolsr::RoutingProtocol
+    class DdsaRoutingProtocolAdapter : public ns3::lqolsr::RoutingProtocol
     {
       public:
 
@@ -36,8 +36,12 @@ namespace ns3 {
 	 */
 	static TypeId GetTypeId (void);
 
-	DdsaAdapter ();
-	virtual ~DdsaAdapter ();
+	DdsaRoutingProtocolAdapter ();
+	virtual ~DdsaRoutingProtocolAdapter ();
+	double GetAlpha();
+	Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Address dstAddr, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
+	int GetNRetransmissions();
+	Dap SelectDap();
 
       protected:
 
@@ -50,7 +54,6 @@ namespace ns3 {
 	void CalculateProbabilities();
 	double SumUpNotExcludedDapCosts();
 	bool ExcludeDaps();
-	Dap SelectDap();
 	void AssociationTupleTimerExpire (Ipv4Address address);
 	void BuildEligibleGateways();
 
@@ -67,5 +70,5 @@ namespace ns3 {
   }
 }
 
-#endif /* DDSA_H */
+#endif /* DDSA_ROUTING_PROTOCOL_H */
 

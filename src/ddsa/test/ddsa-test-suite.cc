@@ -2,6 +2,9 @@
 
 // Include a header file from your module to test.
 #include "ns3/ddsa.h"
+#include "ns3/ddsa-helper.h"
+#include "ns3/integer.h"
+#include "ns3/double.h"
 
 // An essential include is test.h
 #include "ns3/test.h"
@@ -40,6 +43,11 @@ DdsaTestCase1::~DdsaTestCase1 ()
 void
 DdsaTestCase1::DoRun (void)
 {
+  DDsaHelper helper;
+
+  helper.Set("Alpha", DoubleValue(0.1));
+  helper.Set("Retrans", IntegerValue(1));
+
   // A wide variety of test macros are available in src/core/test.h
   NS_TEST_ASSERT_MSG_EQ (true, true, "true doesn't equal true for some reason");
   // Use this one for floating point comparisons

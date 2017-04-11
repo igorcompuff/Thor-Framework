@@ -1,48 +1,48 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
-#include "ddsa.h"
 #include "ns3/log.h"
 #include "ns3/double.h"
 #include "ns3/integer.h"
 #include "ns3/lq-olsr-repositories.h"
 #include <algorithm>
+#include "ddsa-routing-protocol-adapter.h"
 
 namespace ns3 {
 
-  NS_LOG_COMPONENT_DEFINE ("DdsaAdapter");
+  NS_LOG_COMPONENT_DEFINE ("DdsaRoutingProtocolAdapter");
 
   namespace ddsa {
 
-    NS_OBJECT_ENSURE_REGISTERED (DdsaAdapter);
+    NS_OBJECT_ENSURE_REGISTERED (DdsaRoutingProtocolAdapter);
 
     TypeId
-    DdsaAdapter::GetTypeId (void)
+    DdsaRoutingProtocolAdapter::GetTypeId (void)
     {
-      static TypeId tid = TypeId ("ns3::ddsa::DdsaAdapter")
+      static TypeId tid = TypeId ("ns3::ddsa::DdsaRoutingProtocolAdapter")
         .SetParent<RoutingProtocol> ()
         .SetGroupName ("Ddsa")
-        .AddConstructor<DdsaAdapter> ()
+        .AddConstructor<DdsaRoutingProtocolAdapter> ()
         .AddAttribute ("Alpha", "The Alpha value used in the DAP exclusion algorithm",
                        DoubleValue (0.0),
-                       MakeDoubleAccessor (&DdsaAdapter::alpha),
+                       MakeDoubleAccessor (&DdsaRoutingProtocolAdapter::alpha),
 		       MakeDoubleChecker<double> (0))
         .AddAttribute ("Retrans", "Number of Retransmissions",
                        IntegerValue (1),
-                       MakeIntegerAccessor(&DdsaAdapter::n_retransmissions),
-                       MakeIntegerChecker<int> (1));
+                       MakeIntegerAccessor(&DdsaRoutingProtocolAdapter::n_retransmissions),
+                       MakeIntegerChecker<int> (0));
       return tid;
     }
 
-    DdsaAdapter::DdsaAdapter(): alpha (0.0), n_retransmissions (1)
+    DdsaRoutingProtocolAdapter::DdsaRoutingProtocolAdapter(): alpha (0.0), n_retransmissions (0)
     {
 
     }
 
-    DdsaAdapter::~DdsaAdapter(){}
+    DdsaRoutingProtocolAdapter::~DdsaRoutingProtocolAdapter(){}
 
 
     double
-    DdsaAdapter::SumUpNotExcludedDapCosts()
+    DdsaRoutingProtocolAdapter::SumUpNotExcludedDapCosts()
     {
       double costSomatory = 0.0;
 
@@ -65,7 +65,7 @@ namespace ns3 {
     }
 
     void
-    DdsaAdapter::CalculateProbabilities()
+    DdsaRoutingProtocolAdapter::CalculateProbabilities()
     {
       double costSomatory = SumUpNotExcludedDapCosts();
 
@@ -89,7 +89,7 @@ namespace ns3 {
     }
 
     bool
-    DdsaAdapter::ExcludeDaps()
+    DdsaRoutingProtocolAdapter::ExcludeDaps()
     {
     	double highestProb = 0;
     	double lambda = 0;
@@ -127,7 +127,7 @@ namespace ns3 {
     }
 
     Dap
-    DdsaAdapter::SelectDap()
+    DdsaRoutingProtocolAdapter::SelectDap()
     {
       double rand = m_rnd->GetValue(0, 1);
       double prob_sum = 0;
@@ -153,7 +153,7 @@ namespace ns3 {
     }
 
     void
-    DdsaAdapter::AssociationTupleTimerExpire (Ipv4Address address)
+    DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire (Ipv4Address address)
     {
       Dap gw;
       gw.address = address;
@@ -171,14 +171,14 @@ namespace ns3 {
       else
         {
           m_events.Track (Simulator::Schedule (DELAY (it->expirationTime),
-                                               &DdsaAdapter::AssociationTupleTimerExpire,
+                                               &DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire,
                                                this, it->address));
         }
     }
 
     //A new HNA message is supposed to have been sent by a DAP.
     void
-    DdsaAdapter::ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface)
+    DdsaRoutingProtocolAdapter::ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface)
     {
       Time now = Simulator::Now ();
 
@@ -203,7 +203,7 @@ namespace ns3 {
 	      gw.cost = entry1.cost;
 	      m_gateways.push_back(gw);
 
-	      Simulator::Schedule (DELAY (gw.expirationTime), &DdsaAdapter::AssociationTupleTimerExpire, this, gw.address);
+	      Simulator::Schedule (DELAY (gw.expirationTime), &DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire, this, gw.address);
 
 	      BuildEligibleGateways();
 	    }
@@ -213,14 +213,14 @@ namespace ns3 {
     }
 
     void
-    DdsaAdapter::LqRoutingTableComputation ()
+    DdsaRoutingProtocolAdapter::LqRoutingTableComputation ()
     {
       RoutingProtocol::LqRoutingTableComputation();
       BuildEligibleGateways();
     }
 
     Ptr<Ipv4Route>
-    DdsaAdapter::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
+    DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
     {
       Dap selectedDap = SelectDap();
       header.SetDestination(selectedDap.address);
@@ -228,8 +228,19 @@ namespace ns3 {
       return RoutingProtocol::RouteOutput(p, header, oif, sockerr);
     }
 
+    Ptr<Ipv4Route>
+    DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Address dstAddr, Ptr<NetDevice> oif,
+					     Socket::SocketErrno &sockerr)
+    {
+      Ipv4Header header;
+      header.SetDestination (dstAddr);
+
+      return RouteOutput(p, header, oif, sockerr);
+    }
+
+
     void
-    DdsaAdapter::BuildEligibleGateways()
+    DdsaRoutingProtocolAdapter::BuildEligibleGateways()
     {
     	bool processDapComputation = true;
 
@@ -238,6 +249,18 @@ namespace ns3 {
     		CalculateProbabilities();
     		processDapComputation = ExcludeDaps();
     	}
+    }
+
+    double
+    DdsaRoutingProtocolAdapter::GetAlpha()
+    {
+      return alpha;
+    }
+
+    int
+    DdsaRoutingProtocolAdapter::GetNRetransmissions()
+    {
+      return n_retransmissions;
     }
 
   }

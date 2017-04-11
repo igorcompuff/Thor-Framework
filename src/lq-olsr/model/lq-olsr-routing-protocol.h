@@ -178,6 +178,17 @@ public:
   }
 
   /**
+   *  \brief Sets the link-quality aware metric used. This method only alters the state of olsr class once. The metric
+   *  cannot be reseted
+   *
+   * \param metric The metric to be set.
+   */
+
+  void SetLqMetric(Ptr<lqmetric::LqAbstractMetric> metric);
+
+  void SetLinkQualityEnabled(bool enabled);
+
+  /**
    * Set the interfaces to be excluded.
    * \param exceptions Container of excluded interfaces.
    */

@@ -288,6 +288,21 @@ RoutingProtocol::PrintRoutingTable (Ptr<OutputStreamWrapper> stream) const
     }
 }
 
+void
+RoutingProtocol::SetLqMetric(Ptr<lqmetric::LqAbstractMetric> metric)
+  {
+    if (m_metric == NULL)
+      {
+	m_metric = metric;
+      }
+  }
+
+void
+RoutingProtocol::SetLinkQualityEnabled(bool enabled)
+{
+  linkQualityEnabled = enabled;
+}
+
 void RoutingProtocol::DoInitialize ()
 {
   if (m_mainAddress == Ipv4Address ())

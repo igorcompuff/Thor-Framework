@@ -164,7 +164,7 @@ public:
    * Higher-level layers call this method to send a packet
    * down the stack to the MAC and PHY layers.
    */
-  void Send (Ptr<Packet> packet, Ipv4Address source, 
+  virtual void Send (Ptr<Packet> packet, Ipv4Address source,
              Ipv4Address destination, uint8_t protocol, Ptr<Ipv4Route> route);
   /**
    * \param packet packet to send
