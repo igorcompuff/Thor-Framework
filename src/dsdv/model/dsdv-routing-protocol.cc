@@ -256,7 +256,7 @@ RoutingProtocol::Start ()
 
 Ptr<Ipv4Route>
 RoutingProtocol::RouteOutput (Ptr<Packet> p,
-                              const Ipv4Header &header,
+                              Ipv4Header &header,
                               Ptr<NetDevice> oif,
                               Socket::SocketErrno &sockerr)
 {

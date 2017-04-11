@@ -25,7 +25,7 @@ using namespace ns3;
 
 class Ipv4ARouting : public Ipv4RoutingProtocol {
 public:
-  Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)  { return 0; }
+  Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)  { return 0; }
   bool RouteInput  (Ptr<const Packet> p, const Ipv4Header &header, Ptr<const NetDevice> idev,
                     UnicastForwardCallback ucb, MulticastForwardCallback mcb,
                     LocalDeliverCallback lcb, ErrorCallback ecb) { return false; }
@@ -39,7 +39,7 @@ public:
 
 class Ipv4BRouting : public Ipv4RoutingProtocol {
 public:
-  Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)  { return 0; }
+  Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)  { return 0; }
   bool RouteInput  (Ptr<const Packet> p, const Ipv4Header &header, Ptr<const NetDevice> idev,
                     UnicastForwardCallback ucb, MulticastForwardCallback mcb,
                     LocalDeliverCallback lcb, ErrorCallback ecb) { return false; }

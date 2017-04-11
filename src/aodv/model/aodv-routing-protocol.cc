@@ -356,7 +356,7 @@ RoutingProtocol::Start ()
 }
 
 Ptr<Ipv4Route>
-RoutingProtocol::RouteOutput (Ptr<Packet> p, const Ipv4Header &header,
+RoutingProtocol::RouteOutput (Ptr<Packet> p, Ipv4Header &header,
                               Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
 {
   NS_LOG_FUNCTION (this << header << (oif ? oif->GetIfIndex () : 0));

@@ -474,7 +474,7 @@ Ipv4ClickRouting::SetPromisc (int ifid)
 }
 
 Ptr<Ipv4Route>
-Ipv4ClickRouting::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
+Ipv4ClickRouting::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
 {
   Ptr<Ipv4Route> rtentry;
 

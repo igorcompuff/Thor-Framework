@@ -183,7 +183,7 @@ void Rip::DoInitialize ()
   Ipv4RoutingProtocol::DoInitialize ();
 }
 
-Ptr<Ipv4Route> Rip::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
+Ptr<Ipv4Route> Rip::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
 {
   NS_LOG_FUNCTION (this << header << oif);
 

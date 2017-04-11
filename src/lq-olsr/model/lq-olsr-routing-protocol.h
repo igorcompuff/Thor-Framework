@@ -44,6 +44,17 @@
 #include <vector>
 #include <map>
 
+ /********** Useful macros **********/
+
+///
+/// \brief Gets the delay between a given time and the current time.
+///
+/// If given time is previous to the current one, then this macro returns
+/// a number close to 0. This is used for scheduling events at a certain moment.
+///
+#define DELAY(time) (((time) < (Simulator::Now ())) ? Seconds (0.000001) : \
+		     (time - Simulator::Now () + Seconds (0.000001)))
+
 /// Testcase for MPR computation mechanism
 class LqOlsrMprTestCase;
 
@@ -212,13 +223,52 @@ public:
 
 protected:
   virtual void DoInitialize (void);
+  Ptr<ns3::lqmetric::LqAbstractMetric> m_metric;
+  LqOlsrState m_state;  //!< Internal state with all needed data structs.
+  EventGarbageCollector m_events; //!< Running events.
+
+  // From Ipv4RoutingProtocol
+  virtual Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
+
+  /**
+   *
+   * \brief Processes a HNA message following \RFC{3626} specification.
+   *
+   * The Host Network Association Set is updated (if needed) with the information
+   * of the received HNA message.
+   *
+   * \param msg the %OLSR message which contains the HNA message.
+   * \param senderIface the address of the interface where the message was sent from.
+   *
+   */
+  virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
+
+  /**
+   * \brief Creates the routing table of the node following \RFC{3626} hints.
+   */
+  void LqRoutingTableComputation ();
+
+
+  /**
+   * \brief Creates the routing table of the node following \RFC{3626} hints.
+   */
+  virtual void RoutingTableComputation ();
+
+  /**
+     * \brief Looks up an entry for the specified destination address.
+     * \param [in] dest Destination address.
+     * \param [out] outEntry Holds the routing entry result, if found.
+     * \return true if found, false if not found.
+     */
+    bool Lookup (const Ipv4Address &dest,
+                 RoutingTableEntry &outEntry) const;
+
+
 private:
   std::map<Ipv4Address, RoutingTableEntry> m_table; //!< Data structure for the routing table.
   std::map<Ipv4Address, RoutingTableEntry> m_destinations;
 
   Ptr<Ipv4StaticRouting> m_hnaRoutingTable; //!< Routing table for HNA routes
-
-  EventGarbageCollector m_events; //!< Running events.
 
   uint16_t m_packetSequenceNumber;    //!< Packets sequence number counter.
   uint16_t m_messageSequenceNumber;   //!< Messages sequence number counter.
@@ -229,11 +279,8 @@ private:
   Time m_midInterval;     //!< MID messages' emission interval.
   Time m_hnaInterval;     //!< HNA messages' emission interval.
   uint8_t m_willingness;  //!<  Willingness for forwarding packets on behalf of other nodes.
-
-  LqOlsrState m_state;  //!< Internal state with all needed data structs.
   Ptr<Ipv4> m_ipv4;   //!< IPv4 object the routing is linked to.
   bool linkQualityEnabled;
-  Ptr<ns3::lqmetric::LqAbstractMetric> m_metric;
 
   /**
    * \brief Clears the routing table and frees the memory assigned to each one of its entries.
@@ -325,15 +372,6 @@ private:
   UpdateEntry(Ipv4Address const &dest, Ipv4Address const &next, const Ipv4Address & interfaceAddress, float cost);
 
   /**
-   * \brief Looks up an entry for the specified destination address.
-   * \param [in] dest Destination address.
-   * \param [out] outEntry Holds the routing entry result, if found.
-   * \return true if found, false if not found.
-   */
-  bool Lookup (const Ipv4Address &dest,
-               RoutingTableEntry &outEntry) const;
-
-  /**
    * \brief Finds the appropriate entry which must be used in order to forward
    * a data packet to a next hop (given a destination).
    *
@@ -354,11 +392,7 @@ private:
   bool FindSendEntry (const RoutingTableEntry &entry,
                       RoutingTableEntry &outEntry) const;
 
-  // From Ipv4RoutingProtocol
-  virtual Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p,
-                                      const Ipv4Header &header,
-                                      Ptr<NetDevice> oif,
-                                      Socket::SocketErrno &sockerr);
+
   virtual bool RouteInput (Ptr<const Packet> p,
                            const Ipv4Header &header,
                            Ptr<const NetDevice> idev,
@@ -420,16 +454,19 @@ private:
   void
   GetDestinationNeighbors(const Ipv4Address & dest, float costToDest, std::vector<AdjacentTuple> & adsjacents);
 
-  /**
-   * \brief Creates the routing table of the node following \RFC{3626} hints.
-   */
-  void LqRoutingTableComputation ();
-
 
   /**
-   * \brief Creates the routing table of the node following \RFC{3626} hints.
+   * \brief Include multiple associated interfaces into the routing table
    */
-  void RoutingTableComputation ();
+  void
+  AddInterfaceAssociationsToRoutingTable();
+
+  /**
+   * \brief Include routes for wxternal networks
+   */
+  void
+  CalculateHNARoutingTable();
+
 
   /**
    * \brief Gets the main address associated with a given interface address.
@@ -834,20 +871,6 @@ private:
    * \param senderIface the address of the interface where the message was sent from.
    */
   void ProcessMid (const lqolsr::MessageHeader &msg,
-                   const Ipv4Address &senderIface);
-
-  /**
-   *
-   * \brief Processes a HNA message following \RFC{3626} specification.
-   *
-   * The Host Network Association Set is updated (if needed) with the information
-   * of the received HNA message.
-   *
-   * \param msg the %OLSR message which contains the HNA message.
-   * \param senderIface the address of the interface where the message was sent from.
-   *
-   */
-  void ProcessHna (const lqolsr::MessageHeader &msg,
                    const Ipv4Address &senderIface);
 
   /**

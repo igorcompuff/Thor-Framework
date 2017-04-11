@@ -457,7 +457,7 @@ Ipv4StaticRouting::RemoveRoute (uint32_t index)
 }
 
 Ptr<Ipv4Route> 
-Ipv4StaticRouting::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
+Ipv4StaticRouting::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
 {
   NS_LOG_FUNCTION (this << p<< header << oif << sockerr);
   Ipv4Address destination = header.GetDestination ();

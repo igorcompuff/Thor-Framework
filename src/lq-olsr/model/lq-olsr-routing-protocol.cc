@@ -51,17 +51,6 @@
 
 #include <algorithm>
 
-/********** Useful macros **********/
-
-///
-/// \brief Gets the delay between a given time and the current time.
-///
-/// If given time is previous to the current one, then this macro returns
-/// a number close to 0. This is used for scheduling events at a certain moment.
-///
-#define DELAY(time) (((time) < (Simulator::Now ())) ? Seconds (0.000001) : \
-                     (time - Simulator::Now () + Seconds (0.000001)))
-
 
 
 ///
@@ -1227,6 +1216,8 @@ RoutingProtocol::GetDestinationNeighbors(const Ipv4Address & dest, float costToD
 void
 RoutingProtocol::LqRoutingTableComputation()
 {
+  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " s: Node " << m_mainAddress
+                                                  << ": LqRoutingTableComputation begin...");
   Time now = Simulator::Now ();
   std::vector<AdjacentTuple> adj;
   InitializeDestinations(now);
@@ -1263,6 +1254,23 @@ RoutingProtocol::LqRoutingTableComputation()
 	}
 
     }
+
+    // For each entry in the multiple interface association base
+    // where there exists a routing entry such that:
+    // R_dest_addr == I_main_addr (of the multiple interface association entry)
+    // AND there is no routing entry such that:
+    // R_dest_addr == I_iface_addr
+    AddInterfaceAssociationsToRoutingTable();
+
+    // For each tuple in the association set,
+    // If there is no entry in the routing table with:
+    // R_dest_addr     == A_network_addr/A_netmask
+    // and if the announced network is not announced by the node itself,
+    // then a new routing entry is created.
+    CalculateHNARoutingTable();
+
+    NS_LOG_DEBUG ("Node " << m_mainAddress << ": LqRoutingTableComputation end.");
+    m_routingTableChanged (GetSize ());
 }
 
 void
@@ -1476,6 +1484,24 @@ RoutingProtocol::RoutingTableComputation ()
   // R_dest_addr == I_main_addr (of the multiple interface association entry)
   // AND there is no routing entry such that:
   // R_dest_addr == I_iface_addr
+
+  AddInterfaceAssociationsToRoutingTable();
+
+  // 5. For each tuple in the association set,
+  //    If there is no entry in the routing table with:
+  //        R_dest_addr     == A_network_addr/A_netmask
+  //   and if the announced network is not announced by the node itself,
+  //   then a new routing entry is created.
+
+  CalculateHNARoutingTable();
+
+  NS_LOG_DEBUG ("Node " << m_mainAddress << ": RoutingTableComputation end.");
+  m_routingTableChanged (GetSize ());
+}
+
+void
+RoutingProtocol::AddInterfaceAssociationsToRoutingTable()
+{
   const IfaceAssocSet &ifaceAssocSet = m_state.GetIfaceAssocSet ();
   for (IfaceAssocSet::const_iterator it = ifaceAssocSet.begin ();
        it != ifaceAssocSet.end (); it++)
@@ -1485,25 +1511,24 @@ RoutingProtocol::RoutingTableComputation ()
       bool have_entry1 = Lookup (tuple.mainAddr, entry1);
       bool have_entry2 = Lookup (tuple.ifaceAddr, entry2);
       if (have_entry1 && !have_entry2)
-        {
-          // then a route entry is created in the routing table with:
-          //       R_dest_addr  =  I_iface_addr (of the multiple interface
-          //                                     association entry)
-          //       R_next_addr  =  R_next_addr  (of the recorded route entry)
-          //       R_dist       =  R_dist       (of the recorded route entry)
-          //       R_iface_addr =  R_iface_addr (of the recorded route entry).
-          AddEntry (tuple.ifaceAddr,
-                    entry1.nextAddr,
-                    entry1.interface,
-                    entry1.distance);
-        }
+	{
+	  // then a route entry is created in the routing table with:
+	  //       R_dest_addr  =  I_iface_addr (of the multiple interface
+	  //                                     association entry)
+	  //       R_next_addr  =  R_next_addr  (of the recorded route entry)
+	  //       R_dist       =  R_dist       (of the recorded route entry)
+	  //       R_iface_addr =  R_iface_addr (of the recorded route entry).
+	  AddEntry (tuple.ifaceAddr,
+		    entry1.nextAddr,
+		    entry1.interface,
+		    entry1.distance);
+	}
     }
+}
 
-  // 5. For each tuple in the association set,
-  //    If there is no entry in the routing table with:
-  //        R_dest_addr     == A_network_addr/A_netmask
-  //   and if the announced network is not announced by the node itself,
-  //   then a new routing entry is created.
+void
+RoutingProtocol::CalculateHNARoutingTable()
+{
   const AssociationSet &associationSet = m_state.GetAssociationSet ();
 
   // Clear HNA routing table
@@ -1524,20 +1549,20 @@ RoutingProtocol::RoutingTableComputation ()
       const Associations &localHnaAssociations = m_state.GetAssociations ();
       NS_LOG_DEBUG ("Nb local associations: " << localHnaAssociations.size ());
       for (Associations::const_iterator assocIterator = localHnaAssociations.begin ();
-           assocIterator != localHnaAssociations.end (); assocIterator++)
-        {
-          Association const &localHnaAssoc = *assocIterator;
-          if (localHnaAssoc.networkAddr == tuple.networkAddr && localHnaAssoc.netmask == tuple.netmask)
-            {
-              NS_LOG_DEBUG ("HNA association received from another GW is part of local HNA associations: no route added for network "
-                            << tuple.networkAddr << "/" << tuple.netmask);
-              goToNextAssociationTuple = true;
-            }
-        }
+	   assocIterator != localHnaAssociations.end (); assocIterator++)
+	{
+	  Association const &localHnaAssoc = *assocIterator;
+	  if (localHnaAssoc.networkAddr == tuple.networkAddr && localHnaAssoc.netmask == tuple.netmask)
+	    {
+	      NS_LOG_DEBUG ("HNA association received from another GW is part of local HNA associations: no route added for network "
+			    << tuple.networkAddr << "/" << tuple.netmask);
+	      goToNextAssociationTuple = true;
+	    }
+	}
       if (goToNextAssociationTuple)
-        {
-          continue;
-        }
+	{
+	  continue;
+	}
 
       RoutingTableEntry gatewayEntry;
 
@@ -1547,38 +1572,36 @@ RoutingProtocol::RoutingTableComputation ()
       uint32_t routeIndex = 0;
 
       for (routeIndex = 0; routeIndex < m_hnaRoutingTable->GetNRoutes (); routeIndex++)
-        {
-          Ipv4RoutingTableEntry route = m_hnaRoutingTable->GetRoute (routeIndex);
-          if (route.GetDestNetwork () == tuple.networkAddr
-              && route.GetDestNetworkMask () == tuple.netmask)
-            {
-              break;
-            }
-        }
+	{
+	  Ipv4RoutingTableEntry route = m_hnaRoutingTable->GetRoute (routeIndex);
+	  if (route.GetDestNetwork () == tuple.networkAddr
+	      && route.GetDestNetworkMask () == tuple.netmask)
+	    {
+	      break;
+	    }
+	}
 
       if (routeIndex == m_hnaRoutingTable->GetNRoutes ())
-        {
-          addRoute = true;
-        }
+	{
+	  addRoute = true;
+	}
       else if (gatewayEntryExists && m_hnaRoutingTable->GetMetric (routeIndex) > gatewayEntry.distance)
-        {
-          m_hnaRoutingTable->RemoveRoute (routeIndex);
-          addRoute = true;
-        }
+	{
+	  m_hnaRoutingTable->RemoveRoute (routeIndex);
+	  addRoute = true;
+	}
 
       if (addRoute && gatewayEntryExists)
-        {
-          m_hnaRoutingTable->AddNetworkRouteTo (tuple.networkAddr,
-                                                tuple.netmask,
-                                                gatewayEntry.nextAddr,
-                                                gatewayEntry.interface,
-                                                gatewayEntry.distance);
+	{
+	  uint32_t cost = linkQualityEnabled ? pack754_32(gatewayEntry.cost) : gatewayEntry.distance;
+	  m_hnaRoutingTable->AddNetworkRouteTo (tuple.networkAddr,
+						tuple.netmask,
+						gatewayEntry.nextAddr,
+						gatewayEntry.interface,
+						cost);
 
-        }
+	}
     }
-
-  NS_LOG_DEBUG ("Node " << m_mainAddress << ": RoutingTableComputation end.");
-  m_routingTableChanged (GetSize ());
 }
 
 
@@ -1588,6 +1611,7 @@ RoutingProtocol::ProcessHello (const lqolsr::MessageHeader &msg,
                                const Ipv4Address &senderIface)
 {
   NS_LOG_FUNCTION (msg << receiverIface << senderIface);
+
 
   const lqolsr::MessageHeader::Hello &hello = linkQualityEnabled ? msg.GetLqHello() : msg.GetHello ();
 
@@ -3723,7 +3747,7 @@ RoutingProtocol::FindSendEntry (RoutingTableEntry const &entry,
 }
 
 Ptr<Ipv4Route>
-RoutingProtocol::RouteOutput (Ptr<Packet> p, const Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
+RoutingProtocol::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
 {
   NS_LOG_FUNCTION (this << " " << m_ipv4->GetObject<Node> ()->GetId () << " " << header.GetDestination () << " " << oif);
   Ptr<Ipv4Route> rtentry;
