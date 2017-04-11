@@ -18,7 +18,7 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 #include "ddsa-helper.h"
-#include "ns3/ddsa.h"
+#include "ns3/ddsa-routing-protocol-adapter.h"
 #include "ns3/node-list.h"
 #include "ns3/names.h"
 #include "ns3/ptr.h"
@@ -28,7 +28,7 @@ namespace ns3 {
 
 DDsaHelper::DDsaHelper ()
 {
-  m_agentFactory.SetTypeId ("ns3::ddsa::DdsaAdapter");
+  m_agentFactory.SetTypeId ("ns3::ddsa::DdsaRoutingProtocolAdapter");
 }
 
 DDsaHelper::DDsaHelper (const DDsaHelper &o) : m_agentFactory (o.m_agentFactory)
