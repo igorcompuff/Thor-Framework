@@ -18,39 +18,37 @@
  * Author: Gustavo J. A. M. Carneiro  <gjc@inescporto.pt>
  */
 
-#ifndef LQ_ABSTRACT_METRIC_H
-#define LQ_ABSTRACT_METRIC_H
+#ifndef ETX_H
+#define ETX_H
 
 #include <stdint.h>
-#include <vector>
+#include <map>
 #include "ns3/header.h"
 #include "ns3/object.h"
 #include "ns3/ipv4-address.h"
 #include "ns3/nstime.h"
 #include "ns3/lq-olsr-header.h"
+#include "data-structures.h"
+#include <limits>
+#include "ns3/lq-metric.h"
 #include "ns3/packet.h"
 
 
 namespace ns3 {
 namespace lqmetric {
 
+using namespace ns3::lqolsr;
+
 /**
  *
 */
-class LqAbstractMetric: public Object
+class Etx: public LqAbstractMetric
 {
-public:
-
-    enum MetricType
-      {
-	BETTER_LOWER = 1,
-	BETTER_HIGHER    = 2,
-	NOT_DEF    = 3,
-      };
+  public:
 
     //Constructors and destructors
-    LqAbstractMetric ();
-    virtual ~LqAbstractMetric ();
+    Etx ();
+    virtual ~Etx ();
 
 
     //Public methods
@@ -59,26 +57,27 @@ public:
     /*
      * Gets the cost of the link to the specified neighbor ifaddress
      */
-    virtual float GetCost(const Ipv4Address & neighborIfaceAddress) = 0;
+    virtual float GetCost(const Ipv4Address & neighborIfaceAddress);
 
     /*
      * Gets the cost calculated based on the specified metricInfo
      */
-    virtual float GetCost(uint32_t metricInfo) = 0;
+    virtual float GetCost(uint32_t metricInfo);
 
-    virtual uint32_t GetMetricInfo(const Ipv4Address & neighborIfaceAddress) = 0;
+    virtual uint32_t GetMetricInfo(const Ipv4Address & neighborIfaceAddress);
 
     /*
      * Get the highest link cost possible.
      */
-    virtual float GetInfinityCostValue() = 0;
+    virtual float GetInfinityCostValue();
 
     /*
      * Notifies the metric about the reception of a message, so it can take the appropriate
      * actions.
      */
-    virtual void NotifyMessageReceived(Ptr<Packet> packet, const Ipv4Address &receiverIface,
-	                               const Ipv4Address &senderIface) = 0;
+    virtual void NotifyMessageReceived(Ptr<Packet> packet,
+	                               const Ipv4Address &receiverIface,
+	                               const Ipv4Address &senderIface);
 
 
     /*
@@ -91,7 +90,7 @@ public:
      * link/path of the same quality.
      *
     */
-    virtual int CompareBest(float cost1, float cost2) = 0;
+    virtual int CompareBest(float cost1, float cost2);
 
     /*
      * When computing the cost of a path, we need to calculate the resulting cost from a
@@ -102,11 +101,33 @@ public:
      * two costs.
      *
     */
-    virtual float Compound(float cost1, float cost2) = 0;
+    virtual float Compound(float cost1, float cost2);
 
-    virtual float Decompound(float compoundedCost, float partialCost) = 0;
+    virtual float Decompound(float compoundedCost, float partialCost);
 
-    virtual MetricType GetMetricType() = 0;
+    virtual MetricType GetMetricType();
+
+    //Defined in https://tools.ietf.org/html/draft-dearlove-olsrv2-metrics-05, section 4.6
+    static constexpr float DEFAULT_METRIC = 4096;
+    static constexpr float MAXIMUM_METRIC = 1015808;
+
+    static constexpr float UNDEFINED_R_ETX = -1;
+    static const uint16_t MAX_SEQ_NUM = 65535;
+
+private:
+
+    std::map<Ipv4Address, EtxInfo> m_links_info;
+    uint16_t etx_memory_length;
+    Time etx_metric_interval;
+    uint16_t etx_seqno_restart_detection;
+    float etx_hello_timeout_factor;
+    float etx_perfect_metric;
+
+    void HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Address &receiverIface, EtxInfo * info);
+    void Compute(EtxInfo * info);
+    void PacketProcessing(const lqolsr::PacketHeader &pkt, EtxInfo * info);
+    void Timeout(EtxInfo * info);
+
 };
 
 
@@ -114,4 +135,4 @@ public:
 }
 }  // namespace lqolsr, ns3
 
-#endif /* LQ_ABSTRACT_SYMMETRIC_METRIC_H */
+#endif /* ETX_H */

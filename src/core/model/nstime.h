@@ -428,7 +428,7 @@ public:
    */
   inline static Time FromInteger (uint64_t value, enum Unit unit)
   {
-    struct Information *info = PeekInformation (unit);
+    Information *info = PeekInformation (unit);
     if (info->fromMul)
       {
         value *= info->factor;
@@ -445,7 +445,7 @@ public:
   }
   inline static Time From (const int64x64_t & value, enum Unit unit)
   {
-    struct Information *info = PeekInformation (unit);
+    Information *info = PeekInformation (unit);
     // DO NOT REMOVE this temporary variable. It's here
     // to work around a compiler bug in gcc 3.4
     int64x64_t retval = value;
@@ -476,7 +476,7 @@ public:
    */
   inline int64_t ToInteger (enum Unit unit) const
   {
-    struct Information *info = PeekInformation (unit);
+    Information *info = PeekInformation (unit);
     int64_t v = m_data;
     if (info->toMul)
       {
@@ -494,7 +494,7 @@ public:
   }
   inline int64x64_t To (enum Unit unit) const
   {
-    struct Information *info = PeekInformation (unit);
+    Information *info = PeekInformation (unit);
     int64x64_t retval = int64x64_t (m_data);
     if (info->toMul)
       {

@@ -13,7 +13,7 @@ LqAbstractMetric::GetTypeId()
 {
 	static TypeId tid = TypeId ("ns3::lqmetric::LqAbstractMetric")
 	    .SetParent<Object> ()
-	    .SetGroupName ("LqAbstractMetric");
+	    .SetGroupName ("LqMetric");
 	    //.AddConstructor<LqAbstractMetric> ()
 	   //	.AddAttribute ("MetricInfo", "LQ metric information acquired from Hello and TC messages",
 	   //	               UintegerValue(0),

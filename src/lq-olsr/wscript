@@ -14,6 +14,9 @@ def build(bld):
         'model/lq-olsr-header.cc',
         'model/lq-olsr-state.cc',
         'model/metric/lq-metric.cc',
+        'model/lq-olsr-util.cc',
+        'model/metric/etx/data-structures.cc',
+        'model/metric/etx/etx-ff.cc',
         'helper/lq-olsr-helper.cc',
         ]
 
@@ -33,6 +36,8 @@ def build(bld):
         'model/lq-olsr-repositories.h',
         'model/lq-olsr-util.h',
         'model/metric/lq-metric.h',
+        'model/metric/etx/data-structures.h',
+        'model/metric/etx/etx-ff.h',
         'helper/lq-olsr-helper.h',
         ]
 

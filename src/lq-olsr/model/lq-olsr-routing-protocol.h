@@ -132,6 +132,8 @@ public:
    */
   void Dump (void);
 
+  bool LinkExists(Ipv4Address & neighborAddress);
+
   /**
    * Return the list of routing table entries discovered by OLSR
    */
@@ -187,6 +189,10 @@ public:
   void SetLqMetric(Ptr<lqmetric::LqAbstractMetric> metric);
 
   void SetLinkQualityEnabled(bool enabled);
+
+  //bool IsLinkQualityEnabled();
+
+  bool IsLinkQualityEnabled() const;
 
   /**
    * Set the interfaces to be excluded.
@@ -909,6 +915,8 @@ private:
   bool
   ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::MessageHeader::LqHello &lqhello,
   			   const Ipv4Address &receiverIface, Time now, Time vTime);
+
+
 
   /**
    * \brief Updates Link Set according to a new received HELLO message
