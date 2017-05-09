@@ -15,7 +15,7 @@ namespace lqmetric {
 
   struct SequenceNumber
   {
-    uint16_t m_sequenceNUmber;
+    uint16_t m_sequenceNumber;
     bool isUndefined;
   };
 

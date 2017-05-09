@@ -83,16 +83,21 @@ struct RoutingTableEntry
   }
 };
 
-struct AdjacentTuple
-{
-  Ipv4Address addr; //!< Address of the destination node.
-  float cost; //!< Cost to the destination.
-
-  AdjacentTuple () : // default values
-    addr (), cost(0)
+/// \ingroup olsr
+  /// A Link Tuple.
+  struct DestinationTuple
   {
+    /// Interface address of the local node.
+    Ipv4Address destAddress;
+    /// Interface address of the neighbor node.
+    const LinkTuple * accessLink;
+  };
+
+  static inline bool
+  operator == (const DestinationTuple &a, const DestinationTuple &b)
+  {
+    return (a.destAddress == b.destAddress);
   }
-};
 
 class RoutingProtocol;
 
@@ -115,9 +120,7 @@ public:
   RoutingProtocol ();
   virtual ~RoutingProtocol ();
 
-  std::vector<Ipv4Address> getNeighborsOf(const Ipv4Address & dst);
   lqmetric::LqAbstractMetric::MetricType getMetricType();
-  float getCostTo(const Ipv4Address & dst);
   /**
    * \brief Set the OLSR main address to the first address on the indicated interface.
    *
@@ -131,8 +134,6 @@ public:
    * this function does nothing.
    */
   void Dump (void);
-
-  bool LinkExists(Ipv4Address & neighborAddress);
 
   /**
    * Return the list of routing table entries discovered by OLSR
@@ -283,7 +284,8 @@ protected:
 
 private:
   std::map<Ipv4Address, RoutingTableEntry> m_table; //!< Data structure for the routing table.
-  std::map<Ipv4Address, RoutingTableEntry> m_destinations;
+  std::vector<DestinationTuple> m_destinations;
+  std::map<Ipv4Address, float> m_costs;
 
   Ptr<Ipv4StaticRouting> m_hnaRoutingTable; //!< Routing table for HNA routes
 
@@ -463,13 +465,13 @@ private:
   void MprComputation ();
 
   void
-  InitializeDestinations(Time now);
+  InitializeDestinations();
 
-  RoutingTableEntry*
-  EvaluateNextDestination();
+  DestinationTuple *
+  GetMinDestination();
 
   void
-  GetDestinationNeighbors(const Ipv4Address & dest, float costToDest, std::vector<AdjacentTuple> & adsjacents);
+  UpdateDestinationNeighbors(const DestinationTuple * dest);
 
 
   /**

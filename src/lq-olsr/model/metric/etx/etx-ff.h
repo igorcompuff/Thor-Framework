@@ -32,6 +32,7 @@
 #include <limits>
 #include "ns3/lq-metric.h"
 #include "ns3/packet.h"
+#include "ns3/event-garbage-collector.h"
 
 
 namespace ns3 {
@@ -122,11 +123,12 @@ private:
     uint16_t etx_seqno_restart_detection;
     float etx_hello_timeout_factor;
     float etx_perfect_metric;
+    EventGarbageCollector m_events;
 
     void HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Address &receiverIface, EtxInfo * info);
     void Compute(EtxInfo * info);
     void PacketProcessing(const lqolsr::PacketHeader &pkt, EtxInfo * info);
-    void Timeout(EtxInfo * info);
+    void Timeout(EtxInfo * info, const Time & expirationTime);
 
 };
 

@@ -1,6 +1,7 @@
 #include "etx-ff.h"
 #include "ns3/lq-olsr-util.h"
 #include "ns3/simulator.h"
+#include "ns3/lq-olsr-routing-protocol.h"
 
 namespace ns3{
 namespace lqmetric{
@@ -25,11 +26,6 @@ Etx::GetTypeId()
 	    .SetGroupName ("LqMetric")
 	    .AddConstructor<Etx> ();
 
-	   //	.AddAttribute ("MetricInfo", "LQ metric information acquired from Hello and TC messages",
-	   //	               UintegerValue(0),
-	   //	               MakeUintegerAccessor(&LqAbstractMetric::metricInfo),
-	   //	MakeUintegerChecker<uint32_t> ());
-
 	return tid;
 }
 
@@ -47,12 +43,20 @@ Etx::GetMetricType()
 
 
 void
-Etx::Timeout(EtxInfo * info)
+Etx::Timeout(EtxInfo * info, const Time & expirationTime)
 {
-  info->metricLostHellos++;
-  info->metricHelloTime = info->metricHelloTime + info->metricHelloInterval;
+  if (info->metricHelloTime == expirationTime)
+    {
+      info->metricLostHellos++;
+      info->metricHelloTime = info->metricHelloTime + info->metricHelloInterval;
 
-  //Reinicializar o timer com info->metricHelloTime
+      m_events.Track (Simulator::Schedule (DELAY (info->metricHelloTime),
+         					       &Etx::Timeout,
+         					       this,
+         					       info,
+         					       info->metricHelloTime));
+    }
+
 }
 
 void
@@ -60,6 +64,7 @@ Etx::NotifyMessageReceived(Ptr<Packet> packet,
                            const Ipv4Address &receiverIface,
                            const Ipv4Address &senderIface)
 {
+  bool created = false;
   lqolsr::PacketHeader olsrPacketHeader;
   packet->RemoveHeader (olsrPacketHeader);
 
@@ -71,6 +76,7 @@ Etx::NotifyMessageReceived(Ptr<Packet> packet,
     {
       EtxInfo newInfo(etx_memory_length);
       info = &newInfo;
+      created = true;
     }
   else
     {
@@ -107,6 +113,12 @@ Etx::NotifyMessageReceived(Ptr<Packet> packet,
 	  HelloProcessing(hello, receiverIface, info);
 	}
     }
+
+  if (created)
+    {
+      m_events.Track (Simulator::Schedule (DELAY (info->metricHelloTime), &Etx::Timeout, this, info, info->metricHelloTime));
+      m_events.Track (Simulator::Schedule (DELAY (etx_metric_interval), &Etx::Compute, this, info));
+    }
 }
 
 void
@@ -120,7 +132,7 @@ Etx::PacketProcessing(const lqolsr::PacketHeader &pkt, EtxInfo * info)
   else
     {
       info->metricReceivedLifo.IncrementCurrent();
-      uint16_t diff = (pkt.GetPacketSequenceNumber() - info->metricLastPktSeqno.m_sequenceNUmber);
+      uint16_t diff = (pkt.GetPacketSequenceNumber() - info->metricLastPktSeqno.m_sequenceNumber);
 
       if (diff < 0)
 	{
@@ -135,7 +147,7 @@ Etx::PacketProcessing(const lqolsr::PacketHeader &pkt, EtxInfo * info)
       info->metricTotalLifo.IncrementCurrent(diff);
     }
 
-  info->metricLastPktSeqno.m_sequenceNUmber = pkt.GetPacketSequenceNumber();
+  info->metricLastPktSeqno.m_sequenceNumber = pkt.GetPacketSequenceNumber();
   info->metricLastPktSeqno.isUndefined = false;
 
 }
@@ -214,6 +226,8 @@ Etx::Compute(EtxInfo * info)
 
   info->metricReceivedLifo.Push(0);
   info->metricTotalLifo.Push(0);
+
+  m_events.Track (Simulator::Schedule (DELAY (etx_metric_interval), &Etx::Compute, this, info));
 
 }
 
