@@ -309,7 +309,9 @@ RoutingProtocol::SetLqMetric(Ptr<lqmetric::LqAbstractMetric> metric)
   {
     if (m_metric == NULL)
       {
+	NS_LOG_DEBUG ("The metric is defined as: " << metric->GetTypeId().GetName());
 	m_metric = metric;
+	SetLinkQualityEnabled(true);
       }
   }
 
@@ -344,7 +346,7 @@ void RoutingProtocol::DoInitialize ()
       NS_ASSERT (m_mainAddress != Ipv4Address ());
     }
 
-  NS_LOG_DEBUG ("Starting OLSR on node " << m_mainAddress);
+  NS_LOG_DEBUG ("Starting LQ_OLSR on node " << m_mainAddress);
 
   Ipv4Address loopback ("127.0.0.1");
 
@@ -397,7 +399,7 @@ void RoutingProtocol::DoInitialize ()
       MidTimerExpire ();
       HnaTimerExpire ();
 
-      NS_LOG_DEBUG ("OLSR on node " << m_mainAddress << " started on mode" <<
+      NS_LOG_DEBUG ("LQ_OLSR on node " << m_mainAddress << " started on mode" <<
 		    (IsLinkQualityEnabled() ? " link-quality" : " Hop count") );
     }
 }

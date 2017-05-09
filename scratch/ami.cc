@@ -57,37 +57,25 @@
 #include "ns3/wifi-module.h"
 #include "ns3/csma-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/olsr-routing-protocol.h"
-#include "ns3/olsr-helper.h"
+#include "ns3/ddsa-routing-protocol-adapter.h"
+//#include "ns3/olsr-routing-protocol.h"
+#include "ns3/ddsa-helper.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <string>
 #include "ns3/lq-olsr-header.h"
+#include "ns3/etx-ff.h"
 
 using namespace ns3;
-using namespace ns3::olsr;
+using namespace ns3::lqolsr;
+using namespace ns3::lqmetric;
 
-NS_LOG_COMPONENT_DEFINE ("AMI3");
+NS_LOG_COMPONENT_DEFINE ("ami");
 
 void ReceivePacket (Ptr<Socket> socket)
 {
 	NS_LOG_UNCOND ("Received one packet!");
-}
-
-void DoFail(Ptr<Node> failingNode)
-{
-	NS_LOG_UNCOND ("Fail!");
-
-	Ptr<DDSAIpv4L3Protocol> ddsal3 = failingNode->GetObject<DDSAIpv4L3Protocol>();
-	Ipv4Address address(0x0A010103U);
-
-	ddsal3->MakeFail(address);
-
-
-	//failingNode->GetObject<Ipv4> ()->SetDown(1);
-
-
 }
 
 static void GenerateTraffic (Ptr<Socket> socket, uint32_t pktSize,
@@ -194,17 +182,17 @@ int main (int argc, char *argv[])
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   mobility.Install (olsrNodes);
 
-  OlsrHelper olsr;
+  DDsaHelper ddsa (Etx::GetTypeId());
 
   // Specify Node B's csma device as a non-OLSR device.
-  olsr.ExcludeInterface (olsrNodes.Get (1), 2);
-  olsr.ExcludeInterface (olsrNodes.Get (2), 2);
+  ddsa.ExcludeInterface (olsrNodes.Get (1), 2);
+  ddsa.ExcludeInterface (olsrNodes.Get (2), 2);
 
   Ipv4StaticRoutingHelper staticRouting;
 
   Ipv4ListRoutingHelper list;
   list.Add (staticRouting, 0);
-  list.Add (olsr, 10);
+  list.Add (ddsa, 10);
 
   InternetStackHelper internet_olsr;
   internet_olsr.SetRoutingHelper (list); // has effect on the next Install ()
@@ -220,17 +208,6 @@ int main (int argc, char *argv[])
 
   ipv4.SetBase ("172.16.1.0", "255.255.255.0");
   ipv4.Assign (csmaDevices);
-
-  Ptr<DDSAIpv4L3Protocol> ddsal3 = olsrNodes.Get(0)->GetObject<DDSAIpv4L3Protocol>();
-  std::vector<DDSAGateway> gws;
-
-  DDSAGateway gw1(0x0A010102U, 0.9);
-  DDSAGateway gw2(0x0A010103, 0.5);
-
-  gws.push_back(gw1);
-  gws.push_back(gw2);
-
-  ddsal3->AddGateways(gws);
 
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
   Ptr<Socket> recvSink = Socket::CreateSocket (csmaNodes.Get (0), tid);
@@ -251,15 +228,15 @@ int main (int argc, char *argv[])
 	  Ptr<Ipv4RoutingProtocol> rp_Gw = (stack->GetRoutingProtocol ());
 	  Ptr<Ipv4ListRouting> lrp_Gw = DynamicCast<Ipv4ListRouting> (rp_Gw);
 
-	  Ptr<olsr::RoutingProtocol> olsrrp_Gw;
+	  Ptr<ddsa::DdsaRoutingProtocolAdapter> ddsa_rpa;
 
 	  for (uint32_t i = 0; i < lrp_Gw->GetNRoutingProtocols ();  i++)
 	  {
 		  int16_t priority;
 		  Ptr<Ipv4RoutingProtocol> temp = lrp_Gw->GetRoutingProtocol (i, priority);
-		  if (DynamicCast<olsr::RoutingProtocol> (temp))
+		  if (DynamicCast<ddsa::DdsaRoutingProtocolAdapter> (temp))
 		  {
-			  olsrrp_Gw = DynamicCast<olsr::RoutingProtocol> (temp);
+		      ddsa_rpa = DynamicCast<ddsa::DdsaRoutingProtocolAdapter> (temp);
 		  }
 	  }
 
@@ -273,13 +250,13 @@ int main (int argc, char *argv[])
 		  // and have the node generate HNA messages for all these routes
 		  // which are associated with non-OLSR interfaces specified above.
 		  hnaEntries->AddNetworkRouteTo (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"), uint32_t (2), uint32_t (1));
-		  olsrrp_Gw->SetRoutingTableAssociation (hnaEntries);
+		  ddsa_rpa->SetRoutingTableAssociation (hnaEntries);
 	  }
 
 	  if (assocMethod2)
 	  {
 		  // Specify the required associations directly.
-		  olsrrp_Gw->AddHostNetworkAssociation (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"));
+		  ddsa_rpa->AddHostNetworkAssociation (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"));
 	  }
   }
 
@@ -287,13 +264,12 @@ int main (int argc, char *argv[])
   wifiPhy.EnablePcap ("olsr-hna", devices);
   csma.EnablePcap ("csma", csmaDevices, false);
 
-  LogComponentEnable("OlsrRoutingProtocol", LOG_LEVEL_DEBUG);
+  LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
 
   Simulator::ScheduleWithContext (source->GetNode ()->GetId (),
                                   Seconds (5.0), &GenerateTraffic,
                                   source, packetSize, numPackets, interPacketInterval);
 
-  Simulator::Schedule (Seconds(10), &DoFail, olsrNodes.Get(0));
   Simulator::Stop (Seconds (100.0));
   Simulator::Run ();
   Simulator::Destroy ();

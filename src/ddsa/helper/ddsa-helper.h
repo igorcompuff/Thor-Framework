@@ -47,6 +47,8 @@ public:
    */
   DDsaHelper ();
 
+  DDsaHelper (const TypeId & tid);
+
   /**
    * \brief Construct an OlsrHelper from another previously initialized instance
    * (Copy Constructor).
@@ -91,8 +93,10 @@ private:
    */
   DDsaHelper &operator = (const DDsaHelper &);
   ObjectFactory m_agentFactory; //!< Object factory
+  ObjectFactory m_metricFactory; //!< Object factory
 
   std::map< Ptr<Node>, std::set<uint32_t> > m_interfaceExclusions; //!< container of interfaces excluded from OLSR operations
+  bool isLinkQuality;
 };
 
 } // namespace ns3

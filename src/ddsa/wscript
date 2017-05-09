@@ -12,6 +12,7 @@ def build(bld):
         'model/ddsa-routing-protocol-adapter.cc',
         'model/ipv4-l3-protocol-ddsa-adapter.cc',
         'helper/ddsa-helper.cc',
+        'helper/ddsa-internet-stack-helper.cc',
         ]
 
     module_test = bld.create_ns3_module_test_library('ddsa')
@@ -25,6 +26,7 @@ def build(bld):
         'model/ddsa-routing-protocol-adapter.h',
         'model/ipv4-l3-protocol-ddsa-adapter.h',
         'helper/ddsa-helper.h',
+        'helper/ddsa-internet-stack-helper.h',
         ]
 
     if bld.env.ENABLE_EXAMPLES:

@@ -23,17 +23,27 @@
 #include "ns3/names.h"
 #include "ns3/ptr.h"
 #include "ns3/ipv4-list-routing.h"
+#include "ns3/lq-metric.h"
 
 namespace ns3 {
 
 DDsaHelper::DDsaHelper ()
 {
   m_agentFactory.SetTypeId ("ns3::ddsa::DdsaRoutingProtocolAdapter");
+  isLinkQuality = false;
 }
 
-DDsaHelper::DDsaHelper (const DDsaHelper &o) : m_agentFactory (o.m_agentFactory)
+DDsaHelper::DDsaHelper (const TypeId & tid)
+{
+  m_agentFactory.SetTypeId ("ns3::ddsa::DdsaRoutingProtocolAdapter");
+  m_metricFactory.SetTypeId(tid);
+  isLinkQuality = true;
+}
+
+DDsaHelper::DDsaHelper (const DDsaHelper &o) : m_agentFactory (o.m_agentFactory), m_metricFactory (o.m_metricFactory)
 {
   m_interfaceExclusions = o.m_interfaceExclusions;
+  isLinkQuality = o.isLinkQuality;
 }
 
 DDsaHelper*
@@ -46,6 +56,12 @@ Ptr<Ipv4RoutingProtocol>
 DDsaHelper::Create (Ptr<Node> node) const
 {
   Ptr<ddsa::DdsaRoutingProtocolAdapter> agent = m_agentFactory.Create<ddsa::DdsaRoutingProtocolAdapter> ();
+
+  if (isLinkQuality)
+    {
+      Ptr<lqmetric::LqAbstractMetric> metric = m_metricFactory.Create<lqmetric::LqAbstractMetric>();
+      agent->SetLqMetric(metric);
+    }
 
   std::map<Ptr<Node>, std::set<uint32_t> >::const_iterator it = m_interfaceExclusions.find (node);
 
