@@ -164,7 +164,7 @@ RoutingProtocol::GetTypeId (void)
                    MakeTimeAccessor (&RoutingProtocol::m_hnaInterval),
                    MakeTimeChecker ())
     .AddAttribute ("Willingness", "Willingness of a node to carry and forward traffic for other nodes.",
-                   EnumValue (OLSR_WILL_DEFAULT),
+                   EnumValue (OLSR_WILL_ALWAYS),
                    MakeEnumAccessor (&RoutingProtocol::m_willingness),
                    MakeEnumChecker (OLSR_WILL_NEVER, "never",
                                     OLSR_WILL_LOW, "low",
@@ -561,7 +561,8 @@ RoutingProtocol::RecvOlsr (Ptr<Socket> socket)
           // HELLO messages are never forwarded.
           // TC and MID messages are forwarded using the default algorithm.
           // Remaining messages are also forwarded using the default algorithm.
-          if (messageHeader.GetMessageType ()  != lqolsr::MessageHeader::HELLO_MESSAGE)
+          if (messageHeader.GetMessageType ()  != lqolsr::MessageHeader::HELLO_MESSAGE &&
+              messageHeader.GetMessageType ()  != lqolsr::MessageHeader::LQ_HELLO_MESSAGE)
             {
               ForwardDefault (messageHeader, duplicated,
                               receiverIfaceAddr, inetSourceAddr.GetIpv4 ());
@@ -1532,21 +1533,20 @@ RoutingProtocol::ProcessHello (const lqolsr::MessageHeader &msg,
     {
       PopulateTwoHopNeighborSet (msg, hello);
       MprComputation ();
+      #ifdef NS3_LOG_ENABLE
+	{
+	  const TwoHopNeighborSet &twoHopNeighbors = m_state.GetTwoHopNeighbors ();
+	  NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+			<< "s ** BEGIN dump TwoHopNeighbor Set for OLSR Node " << m_mainAddress);
+	  for (TwoHopNeighborSet::const_iterator tuple = twoHopNeighbors.begin ();
+	       tuple != twoHopNeighbors.end (); tuple++)
+	    {
+	      NS_LOG_DEBUG (*tuple);
+	    }
+	  NS_LOG_DEBUG ("** END dump TwoHopNeighbor Set for OLSR Node " << m_mainAddress);
+	}
+      #endif // NS3_LOG_ENABLE
     }
-
-#ifdef NS3_LOG_ENABLE
-  {
-    const TwoHopNeighborSet &twoHopNeighbors = m_state.GetTwoHopNeighbors ();
-    NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
-                  << "s ** BEGIN dump TwoHopNeighbor Set for OLSR Node " << m_mainAddress);
-    for (TwoHopNeighborSet::const_iterator tuple = twoHopNeighbors.begin ();
-         tuple != twoHopNeighbors.end (); tuple++)
-      {
-        NS_LOG_DEBUG (*tuple);
-      }
-    NS_LOG_DEBUG ("** END dump TwoHopNeighbor Set for OLSR Node " << m_mainAddress);
-  }
-#endif // NS3_LOG_ENABLE
 
 
   PopulateMprSelectorSet (msg, hello);
@@ -2125,7 +2125,7 @@ RoutingProtocol::SendLqHello()
       linkMessages.push_back (linkMessage);
     }
 
-  NS_LOG_DEBUG ("OLSR LQ_HELLO message size: " << int (msg.GetSerializedSize ())
+  NS_LOG_DEBUG ("Prepare to send OLSR LQ_HELLO message size: " << int (msg.GetSerializedSize ())
                                               << " (with " << int (linkMessages.size ()) << " link messages)");
   QueueMessage (msg, JITTER);
 
