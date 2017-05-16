@@ -27,18 +27,24 @@ namespace lqmetric {
 
     public:
       LifoQueue(std::vector<int>::size_type max_size);
+      LifoQueue();
       ~LifoQueue();
       void Push(int value);
       int GetCurrent();
+      int GetSize();
       void IncrementCurrent();
       void IncrementCurrent(int amount);
       void SetCurent(int value);
+      int SetMaxSize(std::vector<int>::size_type max_size);
       int Sum();
   };
 
   struct EtxInfo
     {
       EtxInfo(std::vector<int>::size_type max_size);
+      EtxInfo();
+      void Initialize(std::vector<int>::size_type max_size);
+      void SetMaxQueueSize(std::vector<int>::size_type max_size);
 
       LifoQueue metricReceivedLifo; //L_METRIC_received_lifo
       LifoQueue metricTotalLifo; //L_METRIC_received_lifo

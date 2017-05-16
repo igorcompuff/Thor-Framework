@@ -66,6 +66,8 @@
 #include <string>
 #include "ns3/lq-olsr-header.h"
 #include "ns3/etx-ff.h"
+#include "ns3/propagation-loss-model.h"
+#include "ns3/propagation-delay-model.h"
 
 using namespace ns3;
 using namespace ns3::lqolsr;
@@ -129,47 +131,15 @@ int main (int argc, char *argv[])
   Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",
                       StringValue (phyMode));
 
+  //1 - Create nodes
+
   NodeContainer olsrNodes;
   olsrNodes.Create (3);
 
   NodeContainer csmaNodes;
   csmaNodes.Create (1);
 
-  // The below set of helpers will help us to put together the wifi NICs we want
-  WifiHelper wifi;
-  if (verbose)
-    {
-      wifi.EnableLogComponents ();  // Turn on all Wifi logging
-    }
-  wifi.SetStandard (WIFI_PHY_STANDARD_80211b);
-
-  YansWifiPhyHelper wifiPhy =  YansWifiPhyHelper::Default ();
-  // This is one parameter that matters when using FixedRssLossModel
-  // set it to zero; otherwise, gain will be added
-  wifiPhy.Set ("RxGain", DoubleValue (0) );
-  // ns-3 supports RadioTap and Prism tracing extensions for 802.11b
-  wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
-
-  YansWifiChannelHelper wifiChannel;
-  wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
-  // The below FixedRssLossModel will cause the rss to be fixed regardless
-  // of the distance between the two stations, and the transmit power
-  wifiChannel.AddPropagationLoss ("ns3::FixedRssLossModel","Rss",DoubleValue (rss));
-  wifiPhy.SetChannel (wifiChannel.Create ());
-
-  // Add a mac and disable rate control
-  WifiMacHelper wifiMac;
-  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
-                                "DataMode",StringValue (phyMode),
-                                "ControlMode",StringValue (phyMode));
-  // Set it to adhoc mode
-  wifiMac.SetType ("ns3::AdhocWifiMac");
-  NetDeviceContainer devices = wifi.Install (wifiPhy, wifiMac, olsrNodes);
-
-  CsmaHelper csma;
-  csma.SetChannelAttribute ("DataRate", DataRateValue (DataRate (5000000)));
-  csma.SetChannelAttribute ("Delay", TimeValue (MilliSeconds (2)));
-  NetDeviceContainer csmaDevices = csma.Install (NodeContainer (csmaNodes.Get (0), olsrNodes.Get (1), olsrNodes.Get(2)));
+  //2 - Create mobility model
 
   // Note that with FixedRssLossModel, the positions below are not
   // used for received signal strength.
@@ -181,6 +151,49 @@ int main (int argc, char *argv[])
   mobility.SetPositionAllocator (positionAlloc);
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   mobility.Install (olsrNodes);
+
+  // 3. Create propagation loss matrix
+  Ptr<MatrixPropagationLossModel> lossModel = CreateObject<MatrixPropagationLossModel> ();
+  lossModel->SetDefaultLoss (200); // set default loss to 200 dB (no link)
+  lossModel->SetLoss (olsrNodes.Get (0)->GetObject<MobilityModel>(), olsrNodes.Get (1)->GetObject<MobilityModel>(), 40); // set symmetric loss 0 <-> 1 to 50 dB
+  lossModel->SetLoss (olsrNodes.Get (0)->GetObject<MobilityModel>(), olsrNodes.Get (2)->GetObject<MobilityModel>(), 60); // set symmetric loss 2 <-> 1 to 50 dB
+
+  // 4. Create & setup wifi channel
+  Ptr<YansWifiChannel> wifiChannel = CreateObject <YansWifiChannel> ();
+  wifiChannel->SetPropagationLossModel (lossModel);
+  wifiChannel->SetPropagationDelayModel (CreateObject <ConstantSpeedPropagationDelayModel> ());
+
+  // 5. Install wireless devices
+  WifiHelper wifi;
+  wifi.SetStandard (WIFI_PHY_STANDARD_80211b);
+  wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
+                                "DataMode",StringValue (phyMode),
+                                "ControlMode",StringValue (phyMode));
+  if (verbose)
+  {
+    wifi.EnableLogComponents ();  // Turn on all Wifi logging
+  }
+
+
+
+  YansWifiPhyHelper wifiPhy =  YansWifiPhyHelper::Default ();
+  // This is one parameter that matters when using FixedRssLossModel
+  // set it to zero; otherwise, gain will be added
+  wifiPhy.Set ("RxGain", DoubleValue (0) );
+  // ns-3 supports RadioTap and Prism tracing extensions for 802.11b
+  wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+  wifiPhy.SetChannel (wifiChannel);
+
+  // Add a mac and disable rate control
+  WifiMacHelper wifiMac;
+  // Set it to adhoc mode
+  wifiMac.SetType ("ns3::AdhocWifiMac");
+  NetDeviceContainer devices = wifi.Install (wifiPhy, wifiMac, olsrNodes);
+
+  CsmaHelper csma;
+  csma.SetChannelAttribute ("DataRate", DataRateValue (DataRate (5000000)));
+  csma.SetChannelAttribute ("Delay", TimeValue (MilliSeconds (2)));
+  NetDeviceContainer csmaDevices = csma.Install (NodeContainer (csmaNodes.Get (0), olsrNodes.Get (1), olsrNodes.Get(2)));
 
   DDsaHelper ddsa (Etx::GetTypeId());
 
@@ -242,6 +255,7 @@ int main (int argc, char *argv[])
 
 	  if (assocMethod1)
 	  {
+		  std::cout << "TESTE\n";
 		  // Create a special Ipv4StaticRouting instance for RoutingTableAssociation
 		  // Even the Ipv4StaticRouting instance added to list may be used
 		  Ptr<Ipv4StaticRouting> hnaEntries = Create<Ipv4StaticRouting> ();
@@ -265,6 +279,7 @@ int main (int argc, char *argv[])
   csma.EnablePcap ("csma", csmaDevices, false);
 
   LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
+  //LogComponentEnable("Etx", LOG_LEVEL_ALL);
 
   Simulator::ScheduleWithContext (source->GetNode ()->GetId (),
                                   Seconds (5.0), &GenerateTraffic,

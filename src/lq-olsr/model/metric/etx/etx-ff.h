@@ -76,9 +76,10 @@ class Etx: public LqAbstractMetric
      * Notifies the metric about the reception of a message, so it can take the appropriate
      * actions.
      */
-    virtual void NotifyMessageReceived(Ptr<Packet> packet,
-	                               const Ipv4Address &receiverIface,
-	                               const Ipv4Address &senderIface);
+    virtual void NotifyMessageReceived(uint16_t packetSeqNumber,
+				       const MessageList & messages,
+		                       const Ipv4Address &receiverIface,
+		                       const Ipv4Address &senderIface);
 
 
     /*
@@ -123,11 +124,13 @@ private:
     uint16_t etx_seqno_restart_detection;
     float etx_hello_timeout_factor;
     float etx_perfect_metric;
+    //Timer m_helloTimer;
+    //Timer m_calculationTimer;
     EventGarbageCollector m_events;
 
     void HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Address &receiverIface, EtxInfo * info);
     void Compute(EtxInfo * info);
-    void PacketProcessing(const lqolsr::PacketHeader &pkt, EtxInfo * info);
+    void PacketProcessing(uint16_t packetSeqNumber, EtxInfo * info);
     void Timeout(EtxInfo * info, const Time & expirationTime);
 
 };

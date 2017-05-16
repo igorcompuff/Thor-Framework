@@ -35,7 +35,9 @@ namespace ns3 {
 
     DdsaRoutingProtocolAdapter::DdsaRoutingProtocolAdapter(): alpha (0.0), n_retransmissions (0)
     {
-
+      m_rnd = CreateObject<UniformRandomVariable>();
+      m_rnd->SetAttribute("Min", DoubleValue(0));
+      m_rnd->SetAttribute("Max", DoubleValue(1));
     }
 
     DdsaRoutingProtocolAdapter::~DdsaRoutingProtocolAdapter(){}
@@ -129,9 +131,10 @@ namespace ns3 {
     Dap
     DdsaRoutingProtocolAdapter::SelectDap()
     {
-      double rand = m_rnd->GetValue(0, 1);
+      double rand = m_rnd->GetValue();
       double prob_sum = 0;
       Dap selectedDap;
+      selectedDap.address = Ipv4Address::GetBroadcast();
       bool dapFound = false;
 
       std::vector<Dap>::iterator it = m_gateways.begin();
@@ -223,7 +226,10 @@ namespace ns3 {
     DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
     {
       Dap selectedDap = SelectDap();
-      header.SetDestination(selectedDap.address);
+      if (selectedDap.address != Ipv4Address::GetBroadcast())
+	{
+	  header.SetDestination(selectedDap.address);
+	}
 
       return RoutingProtocol::RouteOutput(p, header, oif, sockerr);
     }

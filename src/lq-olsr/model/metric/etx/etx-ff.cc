@@ -2,9 +2,15 @@
 #include "ns3/lq-olsr-util.h"
 #include "ns3/simulator.h"
 #include "ns3/lq-olsr-routing-protocol.h"
+#include "ns3/log.h"
 
 namespace ns3{
+
+  NS_LOG_COMPONENT_DEFINE ("Etx");
+
 namespace lqmetric{
+
+  NS_OBJECT_ENSURE_REGISTERED (Etx);
 
 Etx::Etx()
 {
@@ -45,6 +51,7 @@ Etx::GetMetricType()
 void
 Etx::Timeout(EtxInfo * info, const Time & expirationTime)
 {
+
   if (info->metricHelloTime == expirationTime)
     {
       info->metricLostHellos++;
@@ -60,79 +67,61 @@ Etx::Timeout(EtxInfo * info, const Time & expirationTime)
 }
 
 void
-Etx::NotifyMessageReceived(Ptr<Packet> packet,
+Etx::NotifyMessageReceived(uint16_t packetSeqNumber,
+			   const lqolsr::MessageList & messages,
                            const Ipv4Address &receiverIface,
                            const Ipv4Address &senderIface)
 {
   bool created = false;
-  lqolsr::PacketHeader olsrPacketHeader;
-  packet->RemoveHeader (olsrPacketHeader);
-
   std::map<Ipv4Address, EtxInfo>::iterator it = m_links_info.find(senderIface);
 
   EtxInfo * info;
 
   if (it == m_links_info.end())
     {
-      EtxInfo newInfo(etx_memory_length);
-      info = &newInfo;
+      m_links_info[senderIface].SetMaxQueueSize(etx_memory_length);
+      it = m_links_info.find(senderIface);
       created = true;
     }
-  else
-    {
-      info = &(it->second);
-    }
 
-  PacketProcessing(olsrPacketHeader, info);
+  info = &(it->second);
 
-  uint32_t sizeLeft = olsrPacketHeader.GetPacketLength () - olsrPacketHeader.GetSerializedSize ();
-
-  MessageList messages;
-
-  while (sizeLeft)
-    {
-      MessageHeader messageHeader;
-      if (packet->RemoveHeader (messageHeader) == 0)
-	{
-	  NS_ASSERT (false);
-	}
-
-      sizeLeft -= messageHeader.GetSerializedSize ();
-
-      messages.push_back (messageHeader);
-    }
+  PacketProcessing(packetSeqNumber, info);
 
   for (MessageList::const_iterator messageIter = messages.begin ();
          messageIter != messages.end (); messageIter++)
-    {
-      const MessageHeader &messageHeader = *messageIter;
-
-      if (messageHeader.GetMessageType () == lqolsr::MessageHeader::LQ_HELLO_MESSAGE)
-	{
-	  const lqolsr::MessageHeader::LqHello &hello = messageHeader.GetLqHello();
-	  HelloProcessing(hello, receiverIface, info);
-	}
-    }
+      {
+	if (messageIter->GetMessageType () == lqolsr::MessageHeader::LQ_HELLO_MESSAGE)
+	  {
+	    HelloProcessing(messageIter->GetLqHello(), receiverIface, info);
+	  }
+      }
 
   if (created)
     {
       m_events.Track (Simulator::Schedule (DELAY (info->metricHelloTime), &Etx::Timeout, this, info, info->metricHelloTime));
       m_events.Track (Simulator::Schedule (DELAY (etx_metric_interval), &Etx::Compute, this, info));
     }
+
+  NS_LOG_DEBUG("Notify finished.");
 }
 
 void
-Etx::PacketProcessing(const lqolsr::PacketHeader &pkt, EtxInfo * info)
+Etx::PacketProcessing(uint16_t packetSeqNumber, EtxInfo * info)
 {
+  NS_LOG_DEBUG("Processing packet " << packetSeqNumber);
+
   if (info->metricLastPktSeqno.isUndefined)
     {
       info->metricReceivedLifo.SetCurent(1);
       info->metricTotalLifo.SetCurent(1);
+
+      info->metricLastPktSeqno.isUndefined = false;
     }
   else
     {
       info->metricReceivedLifo.IncrementCurrent();
-      uint16_t diff = (pkt.GetPacketSequenceNumber() - info->metricLastPktSeqno.m_sequenceNumber);
+      uint16_t diff = (packetSeqNumber - info->metricLastPktSeqno.m_sequenceNumber);
 
       if (diff < 0)
 	{
@@ -147,17 +136,16 @@ Etx::PacketProcessing(const lqolsr::PacketHeader &pkt, EtxInfo * info)
       info->metricTotalLifo.IncrementCurrent(diff);
     }
 
-  info->metricLastPktSeqno.m_sequenceNumber = pkt.GetPacketSequenceNumber();
-  info->metricLastPktSeqno.isUndefined = false;
+  info->metricLastPktSeqno.m_sequenceNumber = packetSeqNumber;
 
 }
-
-
 
 void
 Etx::HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Address &receiverIface, EtxInfo * info)
 {
   Time currentTime = Simulator::Now();
+
+  const lqolsr::MessageHeader::NeighborInterfaceInfo * foundInfo = NULL;
 
   for (std::vector<lqolsr::MessageHeader::LqHello::LinkMessage>::const_iterator linkMessage =
       hello.linkMessages.begin ();
@@ -169,20 +157,22 @@ Etx::HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Add
 	       neighIfaceInfo != linkMessage->neighborInterfaceInformation.end ();
                neighIfaceInfo++)
             {
-              if (info != NULL)
-        	{
-        	  if (neighIfaceInfo->neighborInterfaceAddress == receiverIface)
-		    {
-        	      info->metric_d_etx = unpack754_32(neighIfaceInfo->metricInfo / info->metric_r_etx);
-		    }
-        	  else
-        	    {
-        	      info->metric_d_etx = UNDEFINED_R_ETX;
-        	    }
-        	}
+              if (neighIfaceInfo->neighborInterfaceAddress == receiverIface)
+		{
+		  foundInfo = &(*neighIfaceInfo);
+		}
 
             }
         }
+
+  if (foundInfo != NULL)
+    {
+      info->metric_d_etx = unpack754_32(foundInfo->metricInfo / info->metric_r_etx);
+    }
+  else
+    {
+      info->metric_d_etx = UNDEFINED_R_ETX;
+    }
 
   info->metricHelloInterval = hello.GetHTime();
   info->metricHelloTime = currentTime + etx_hello_timeout_factor * hello.GetHTime();
@@ -249,12 +239,16 @@ Etx::GetCost(const Ipv4Address & neighborIfaceAddress)
 {
   std::map<Ipv4Address, EtxInfo>::iterator it = m_links_info.find(neighborIfaceAddress);
 
+  float cost = MAXIMUM_METRIC;
+
   if (it != m_links_info.end())
     {
-      return 1/it->second.metricValue;
+      cost = 1/it->second.metricValue;
     }
 
-  return MAXIMUM_METRIC;
+  NS_LOG_DEBUG("Cost to " << neighborIfaceAddress << " is " << cost);
+
+  return cost;
 }
 
 float

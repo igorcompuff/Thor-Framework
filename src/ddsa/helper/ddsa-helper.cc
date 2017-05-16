@@ -52,6 +52,30 @@ DDsaHelper::Copy (void) const
   return new DDsaHelper (*this);
 }
 
+void
+DDsaHelper::ExcludeInterface (Ptr<Node> node, uint32_t interface)
+{
+  std::map< Ptr<Node>, std::set<uint32_t> >::iterator it = m_interfaceExclusions.find (node);
+
+  if (it == m_interfaceExclusions.end ())
+    {
+      std::set<uint32_t> interfaces;
+      interfaces.insert (interface);
+
+      m_interfaceExclusions.insert (std::make_pair (node, std::set<uint32_t> (interfaces) ));
+    }
+  else
+    {
+      it->second.insert (interface);
+    }
+}
+
+void
+DDsaHelper::Set (std::string name, const AttributeValue &value)
+{
+  m_agentFactory.Set (name, value);
+}
+
 Ptr<Ipv4RoutingProtocol>
 DDsaHelper::Create (Ptr<Node> node) const
 {

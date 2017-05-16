@@ -21,7 +21,6 @@
 #define LQ_DDSA_HELPER_H
 
 #include "ns3/object-factory.h"
-#include "ns3/lq-olsr-helper.h"
 #include "ns3/node.h"
 #include "ns3/node-container.h"
 #include "ns3/ipv4-routing-helper.h"
@@ -38,7 +37,7 @@ namespace ns3 {
  * This class is expected to be used in conjunction with
  * ns3::InternetStackHelper::SetRoutingHelper
  */
-class DDsaHelper : public LqOlsrHelper
+class DDsaHelper : public Ipv4RoutingHelper
 {
 public:
   /**
@@ -64,12 +63,28 @@ public:
   DDsaHelper* Copy (void) const;
 
   /**
+    * \param node the node for which an exception is to be defined
+    * \param interface an interface of node on which OLSR is not to be installed
+    *
+    * This method allows the user to specify an interface on which OLSR is not to be installed on
+    */
+  void ExcludeInterface (Ptr<Node> node, uint32_t interface);
+
+  /**
    * \param node the node on which the routing protocol will run
    * \returns a newly-created routing protocol
    *
    * This method will be called by ns3::InternetStackHelper::Install
    */
   virtual Ptr<Ipv4RoutingProtocol> Create (Ptr<Node> node) const;
+
+  /**
+   * \param name the name of the attribute to set
+   * \param value the value of the attribute to set.
+   *
+   * This method controls the attributes of ns3::olsr::RoutingProtocol
+   */
+  void Set (std::string name, const AttributeValue &value);
 
   /**
    * Assign a fixed random variable stream number to the random variables

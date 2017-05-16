@@ -447,12 +447,15 @@ RoutingProtocol::RecvOlsr (Ptr<Socket> socket)
 
   Ptr<Packet> packet = receivedPacket;
 
+  Ptr<Packet> packetCopy = packet->Copy();
+
   lqolsr::PacketHeader olsrPacketHeader;
   packet->RemoveHeader (olsrPacketHeader);
   NS_ASSERT (olsrPacketHeader.GetPacketLength () >= olsrPacketHeader.GetSerializedSize ());
   uint32_t sizeLeft = olsrPacketHeader.GetPacketLength () - olsrPacketHeader.GetSerializedSize ();
 
   MessageList messages;
+  MessageList messagesToMetricProcessing;
 
   while (sizeLeft)
     {
@@ -534,10 +537,7 @@ RoutingProtocol::RecvOlsr (Ptr<Socket> socket)
                             " not implemented");
             }
 
-          if (IsLinkQualityEnabled())
-            {
-              m_metric->NotifyMessageReceived(packet, receiverIfaceAddr, senderIfaceAddr);
-            }
+          messagesToMetricProcessing.push_back(*messageIter);
         }
       else
         {
@@ -573,6 +573,8 @@ RoutingProtocol::RecvOlsr (Ptr<Socket> socket)
   // After processing all OLSR messages, we must recompute the routing table
   if (IsLinkQualityEnabled())
     {
+      m_metric->NotifyMessageReceived(olsrPacketHeader.GetPacketSequenceNumber(), messagesToMetricProcessing,
+				      receiverIfaceAddr, senderIfaceAddr);
       LqRoutingTableComputation();
     }
   else
@@ -660,6 +662,8 @@ RoutingProtocol::LqMprComputation ()
     }
 
   m_state.SetMprSet(newMprSet);
+
+  NS_LOG_DEBUG ("Mpr Computation concluded for: " << m_mainAddress);
 
 }
 
@@ -1793,7 +1797,6 @@ void
 RoutingProtocol::ProcessHna (const lqolsr::MessageHeader &msg,
                              const Ipv4Address &senderIface)
 {
-
   const lqolsr::MessageHeader::Hna &hna = msg.GetHna ();
   Time now = Simulator::Now ();
 
@@ -2250,11 +2253,13 @@ RoutingProtocol::SendMid ()
       Ipv4Address addr = m_ipv4->GetAddress (i, 0).GetLocal ();
       if (addr != m_mainAddress && addr != loopback && m_interfaceExclusions.find (i) == m_interfaceExclusions.end ())
         {
+	  NS_LOG_DEBUG("Mid address: " << addr << "Main address: " << m_mainAddress);
           mid.interfaceAddresses.push_back (addr);
         }
     }
   if (mid.interfaceAddresses.size () == 0)
     {
+      NS_LOG_DEBUG ("Not sending any MID, node has only one olsr interface.");
       return;
     }
 
@@ -2297,6 +2302,7 @@ RoutingProtocol::SendHna ()
     }
 
   // Else, queue the message to be sent later on
+  NS_LOG_DEBUG("Sending HNA message(seqNumber = " << msg.GetMessageSequenceNumber());
   QueueMessage (msg, JITTER);
 }
 
@@ -2630,7 +2636,9 @@ RoutingProtocol::LinkSensing (const lqolsr::MessageHeader &msg,
   if (created)
     {
       LinkTupleAdded (*link_tuple, hello.willingness);
-      m_events.Track (Simulator::Schedule (DELAY (std::min (link_tuple->time, link_tuple->symTime)),
+      Time t = DELAY (std::min (link_tuple->time, link_tuple->symTime));
+      NS_LOG_DEBUG("Expiration shcedule delay = " << t.GetSeconds());
+      m_events.Track (Simulator::Schedule (t,
                                            &RoutingProtocol::LinkTupleTimerExpire, this,
                                            link_tuple->neighborIfaceAddr));
     }
@@ -2865,6 +2873,8 @@ RoutingProtocol::PopulateMprSelectorSet (const lqolsr::MessageHeader &msg,
 	}
       }
     }
+
+  NS_LOG_DEBUG ("Populate Mpr selectors terminated for: " << m_mainAddress);
 }
 
 /*void

@@ -74,6 +74,7 @@ void experiment (bool enableCtsRts)
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", 
                                 "DataMode",StringValue ("DsssRate2Mbps"), 
                                 "ControlMode",StringValue ("DsssRate1Mbps"));
+
   YansWifiPhyHelper wifiPhy =  YansWifiPhyHelper::Default ();
   wifiPhy.SetChannel (wifiChannel);
   WifiMacHelper wifiMac;

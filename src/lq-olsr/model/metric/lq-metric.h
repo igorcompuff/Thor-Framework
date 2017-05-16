@@ -77,8 +77,10 @@ public:
      * Notifies the metric about the reception of a message, so it can take the appropriate
      * actions.
      */
-    virtual void NotifyMessageReceived(Ptr<Packet> packet, const Ipv4Address &receiverIface,
-	                               const Ipv4Address &senderIface) = 0;
+    virtual void NotifyMessageReceived(uint16_t packetSeqNumber,
+				       const lqolsr::MessageList & messages,
+		                       const Ipv4Address &receiverIface,
+		                       const Ipv4Address &senderIface) = 0;
 
 
     /*
