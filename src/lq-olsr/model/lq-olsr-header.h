@@ -161,12 +161,10 @@ namespace lqolsr {
      */
     enum MessageType
     {
-      HELLO_MESSAGE = 1,
-      TC_MESSAGE    = 2,
+      LQ_HELLO_MESSAGE = 1,
+      LQ_TC_MESSAGE    = 2,
       MID_MESSAGE   = 3,
       HNA_MESSAGE   = 4,
-      LQ_HELLO_MESSAGE = 5,
-      LQ_TC_MESSAGE = 6,
     };
 
     MessageHeader ();
@@ -344,37 +342,52 @@ namespace lqolsr {
       uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
     };
 
-    /**
-     * \ingroup olsr
-     * HELLO Message Format
-     *
-    \verbatim
-      0                   1                   2                   3
-      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    //Associates an interface to the metric of the link to this interface
+    struct NeighborInterfaceInfo
+    {
+	Ipv4Address neighborInterfaceAddress;  //!< Neighbor interface address.
+	uint32_t metricInfo;
+    };
 
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |          Reserved             |     Htime     |  Willingness  |
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |   Link Code   |   Reserved    |       Link Message Size       |
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |                  Neighbor Interface Address                   |
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |                  Neighbor Interface Address                   |
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     :                             .  .  .                           :
-     :                                                               :
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |   Link Code   |   Reserved    |       Link Message Size       |
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |                  Neighbor Interface Address                   |
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |                  Neighbor Interface Address                   |
-     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     :                                                               :
-       (etc.)
+    /**
+    * \ingroup lq_olsr
+    * LQHELLO Message Format
+    *
+    \verbatim
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |          Reserved             |     Htime     |  Willingness  |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |   Link Code   |   Reserved    |       Link Message Size       |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                  Neighbor Interface Address                   |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                        LQ Metric Info                         |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                  Neighbor Interface Address                   |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                        LQ Metric Info                         |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    :                             .  .  .                           :
+    :                                                               :
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |   Link Code   |   Reserved    |       Link Message Size       |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                  Neighbor Interface Address                   |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                        LQ Metric Info                         |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                  Neighbor Interface Address                   |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                        LQ Metric Info                         |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    :                                                               :
+    (etc.)
     \endverbatim
     */
-    struct Hello
+    struct LqHello
     {
       /**
        * Link message item
@@ -382,7 +395,7 @@ namespace lqolsr {
       struct LinkMessage
       {
         uint8_t linkCode;       //!< Link code
-        std::vector<Ipv4Address> neighborInterfaceAddresses;  //!< Neighbor interface address container.
+        std::vector<NeighborInterfaceInfo> neighborInterfaceInformation;  //!< Neighbor interface information container.
       };
 
       uint8_t hTime;  //!< HELLO emission interval (coded)
@@ -438,148 +451,6 @@ namespace lqolsr {
       virtual uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
     };
 
-    //Associates an interface to the metric of the link to this interface
-    struct NeighborInterfaceInfo
-    {
-	    Ipv4Address neighborInterfaceAddress;  //!< Neighbor interface address.
-	    uint32_t metricInfo;
-    };
-
-    /**
-    * \ingroup lq_olsr
-    * LQHELLO Message Format
-    *
-    \verbatim
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |          Reserved             |     Htime     |  Willingness  |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |   Link Code   |   Reserved    |       Link Message Size       |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                  Neighbor Interface Address                   |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                        LQ Metric Info                         |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                  Neighbor Interface Address                   |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                        LQ Metric Info                         |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    :                             .  .  .                           :
-    :                                                               :
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+- +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |   Link Code   |   Reserved    |       Link Message Size       |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                  Neighbor Interface Address                   |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                        LQ Metric Info                         |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                  Neighbor Interface Address                   |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                        LQ Metric Info                         |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    :                                                               :
-    (etc.)
-    \endverbatim
-    */
-
-    struct LqHello: Hello
-    {
-      /**
-       * Link message item
-       */
-      struct LinkMessage
-      {
-	uint8_t linkCode;       //!< Link code
-	std::vector<NeighborInterfaceInfo> neighborInterfaceInformation;  //!< Neighbor interface information container.
-      };
-
-      std::vector<LinkMessage> linkMessages; //!< Link messages container.
-
-      /**
-       * This method is used to print the content of a LqHello message.
-       * \param os output stream
-       */
-      virtual void Print (std::ostream &os) const;
-      /**
-       * Returns the expected size of the header.
-       * \returns the expected size of the header.
-       */
-      virtual uint32_t GetSerializedSize (void) const;
-      /**
-       * This method is used by Packet::AddHeader to
-       * store a header into the byte buffer of a packet.
-       *
-       * \param start an iterator which points to where the header should
-       *        be written.
-       */
-      virtual void Serialize (Buffer::Iterator start) const;
-      /**
-       * This method is used by Packet::RemoveHeader to
-       * re-create a header from the byte buffer of a packet.
-       *
-       * \param start an iterator which points to where the header should
-       *        read from.
-       * \param messageSize the message size.
-       * \returns the number of bytes read.
-       */
-      virtual uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
-    };
-
-    /**
-     * \ingroup olsr
-     * TC Message Format
-     *
-     \verbatim
-       0                   1                   2                   3
-       0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |              ANSN             |           Reserved            |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |               Advertised Neighbor Main Address                |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |               Advertised Neighbor Main Address                |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-      |                              ...                              |
-      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     \endverbatim
-     */
-    struct Tc
-    {
-      std::vector<Ipv4Address> neighborAddresses; //!< Neighbor address container.
-      uint16_t ansn;  //!< Advertised Neighbor Sequence Number.
-
-      /**
-       * This method is used to print the content of a MID message.
-       * \param os output stream
-       */
-      virtual void Print (std::ostream &os) const;
-      /**
-       * Returns the expected size of the header.
-       * \returns the expected size of the header.
-       */
-      virtual uint32_t GetSerializedSize (void) const;
-      /**
-       * This method is used by Packet::AddHeader to
-       * store a header into the byte buffer of a packet.
-       *
-       * \param start an iterator which points to where the header should
-       *        be written.
-       */
-      virtual void Serialize (Buffer::Iterator start) const;
-      /**
-       * This method is used by Packet::RemoveHeader to
-       * re-create a header from the byte buffer of a packet.
-       *
-       * \param start an iterator which points to where the header should
-       *        read from.
-       * \param messageSize the message size.
-       * \returns the number of bytes read.
-       */
-      virtual uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
-    };
-
     /**
     * \ingroup olsr
     * LqTC Message Format
@@ -602,10 +473,10 @@ namespace lqolsr {
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     \endverbatim
     */
-    struct LqTc: Tc
+    struct LqTc
     {
       std::vector<NeighborInterfaceInfo> neighborAddresses; //!< Neighbor interface information container.
-
+      uint16_t ansn;  //!< Advertised Neighbor Sequence Number.
       /**
        * This method is used to print the content of a MID message.
        * \param os output stream
@@ -707,8 +578,6 @@ namespace lqolsr {
     struct
     {
       Mid mid;      //!< MID message (optional).
-      Hello hello;  //!< HELLO message (optional).
-      Tc tc;        //!< TC message (optional).
       Hna hna;      //!< HNA message (optional).
       LqHello lqHello; //!< LQ_HELLO message (optional).
       LqTc lqTc; //!< TC_HELLO message (optional).
@@ -733,23 +602,6 @@ namespace lqolsr {
     }
 
     /**
-     * Set the message type to HELLO and return the message content.
-     * \returns The HELLO message.
-     */
-    Hello& GetHello ()
-    {
-      if (m_messageType == 0)
-        {
-          m_messageType = HELLO_MESSAGE;
-        }
-      else
-        {
-          NS_ASSERT (m_messageType == HELLO_MESSAGE);
-        }
-      return m_message.hello;
-    }
-
-    /**
      * Set the message type to LQ_HELLO and return the message content.
      * \returns The LQ_HELLO message.
      */
@@ -764,23 +616,6 @@ namespace lqolsr {
 	  NS_ASSERT (m_messageType == LQ_HELLO_MESSAGE);
 	}
       return m_message.lqHello;
-    }
-
-    /**
-     * Set the message type to TC and return the message content.
-     * \returns The TC message.
-     */
-    Tc& GetTc ()
-    {
-      if (m_messageType == 0)
-        {
-          m_messageType = TC_MESSAGE;
-        }
-      else
-        {
-          NS_ASSERT (m_messageType == TC_MESSAGE);
-        }
-      return m_message.tc;
     }
 
     /**
@@ -829,16 +664,6 @@ namespace lqolsr {
     }
 
     /**
-     * Get the HELLO message.
-     * \returns The HELLO message.
-     */
-    const Hello& GetHello () const
-    {
-      NS_ASSERT (m_messageType == HELLO_MESSAGE);
-      return m_message.hello;
-    }
-
-    /**
      * Get the LQ_HELLO message.
      * \returns The LQ_HELLO message.
      */
@@ -846,16 +671,6 @@ namespace lqolsr {
     {
       NS_ASSERT (m_messageType == LQ_HELLO_MESSAGE);
       return m_message.lqHello;
-    }
-
-    /**
-     * Get the TC message.
-     * \returns The TC message.
-     */
-    const Tc& GetTc () const
-    {
-      NS_ASSERT (m_messageType == TC_MESSAGE);
-      return m_message.tc;
     }
 
     /**

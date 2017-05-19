@@ -47,7 +47,7 @@ namespace ns3 {
 
 	virtual Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
 	virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
-	void LqRoutingTableComputation ();
+	void RoutingTableComputation ();
 
       private:
 

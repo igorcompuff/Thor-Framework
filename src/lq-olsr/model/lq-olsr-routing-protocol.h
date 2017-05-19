@@ -189,12 +189,6 @@ public:
 
   void SetLqMetric(Ptr<lqmetric::LqAbstractMetric> metric);
 
-  void SetLinkQualityEnabled(bool enabled);
-
-  //bool IsLinkQualityEnabled();
-
-  bool IsLinkQualityEnabled() const;
-
   /**
    * Set the interfaces to be excluded.
    * \param exceptions Container of excluded interfaces.
@@ -261,11 +255,6 @@ protected:
    */
   virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
 
-  /**
-   * \brief Creates the routing table of the node following \RFC{3626} hints.
-   */
-  void LqRoutingTableComputation ();
-
 
   /**
    * \brief Creates the routing table of the node following \RFC{3626} hints.
@@ -299,7 +288,6 @@ private:
   Time m_hnaInterval;     //!< HNA messages' emission interval.
   uint8_t m_willingness;  //!<  Willingness for forwarding packets on behalf of other nodes.
   Ptr<Ipv4> m_ipv4;   //!< IPv4 object the routing is linked to.
-  bool linkQualityEnabled;
 
   /**
    * \brief Clears the routing table and frees the memory assigned to each one of its entries.
@@ -457,12 +445,7 @@ private:
    * \brief Computates MPR set of a node considering link quality.
    */
   void
-  LqMprComputation ();
-
-  /**
-   * \brief Computates MPR set of a node following \RFC{3626} hints.
-   */
-  void MprComputation ();
+  MprComputation ();
 
   void
   InitializeDestinations();
@@ -645,20 +628,9 @@ private:
   void SendHello ();
 
   /**
-   * \brief Sends a LqHello message.
-   */
-  void
-  SendLqHello();
-
-  /**
    * \brief Creates a new %OLSR TC message which is buffered for being sent later on.
    */
   void SendTc ();
-
-  /**
-   * \brief Sends a LqTC message.
-   */
-  void SendLqTc ();
 
   /**
    * \brief Creates a new %OLSR MID message which is buffered for being sent later on.
@@ -769,15 +741,6 @@ private:
   void AddMprSelectorTuple (const MprSelectorTuple  &tuple);
 
   /**
-     * \brief Creates and Adds an MPR selector tuple to the MPR Selector Set.
-     *
-     * \param selectorAddress Main address of the Mpr selector.
-     * \param vTime The vTime of the received message
-     * \param now The current time
-     */
-    void AddMprSelectorTuple (const Ipv4Address & selectorAddress, Time vTime, Time now);
-
-  /**
    * \brief Removes an MPR selector tuple from the MPR Selector Set.
    * Advertised Neighbor Sequence Number (ANSN) is also updated.
    *
@@ -849,23 +812,6 @@ private:
    */
   void CreateTopologyTuple(TopologyTuple & tuple, const Ipv4Address & destAddress,
 			   const Ipv4Address & lastAddress, uint16_t seqNumber, Time expirationTime);
-  /**
-   * \brief Continue processing a LqTc message considering link quality metric.
-   * \param lqtc The LQ_TC message header
-   * \param originAddress The message originator address
-   * \param  expirationTime The expiration time to be associated with the topology tuples
-   */
-  void ContinueProcessingLqTc(const MessageHeader::LqTc & lqtc, const Ipv4Address & originAddress,
-			      Time expirationTime );
-
-  /**
-   * \brief Continue processing a TC message following \RFC{3626} specification.
-   * \param tc The TC message header
-   * \param originAddress The message originator address
-   * \param  expirationTime The expiration time to be associated with the topology tuples
-   */
-  void ContinueProcessingTc(const MessageHeader::Tc & tc, const Ipv4Address & originAddress,
-			    Time expirationTime );
 
   /**
    * \brief Processes a TC message following \RFC{3626} specification.
@@ -911,10 +857,6 @@ private:
   LogLinkSensing(int linkType, int neighborType);
 
   bool
-  ProcessHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::MessageHeader::Hello &hello,
-			   const Ipv4Address &receiverIface, Time now, Time vTime);
-
-  bool
   ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr::MessageHeader::LqHello &lqhello,
   			   const Ipv4Address &receiverIface, Time now, Time vTime);
 
@@ -929,7 +871,7 @@ private:
    * \param senderIface The sender interface.
    */
   void LinkSensing (const lqolsr::MessageHeader &msg,
-                    const lqolsr::MessageHeader::Hello &hello,
+                    const lqolsr::MessageHeader::LqHello &hello,
                     const Ipv4Address &receiverIface,
                     const Ipv4Address &senderIface);
 
@@ -940,7 +882,7 @@ private:
    * \param hello The received HELLO sub-message.
    */
   void PopulateNeighborSet (const lqolsr::MessageHeader &msg,
-                            const lqolsr::MessageHeader::Hello &hello);
+                            const lqolsr::MessageHeader::LqHello &hello);
 
   /**
    * \brief Shows log information for the PopulateTwoHopNeighborSet and PopulateTwoHopNeighborSetLq methods
@@ -948,14 +890,6 @@ private:
    */
   void LogPopulateTwoHopNeighborSet(int neighborType);
 
-  /**
-   * \brief Updates the 2-hop Neighbor Set according to the information contained
-   * in a new received HELLO message (following \RFC{3626}).
-   * \param msg The received message.
-   * \param hello The received HELLO sub-message.
-   */
-  void PopulateTwoHopNeighborSet (const lqolsr::MessageHeader &msg,
-                                  const lqolsr::MessageHeader::Hello &hello);
 
   /**
    * \brief Updates the 2-hop Neighbor Set according to the information contained
@@ -966,16 +900,6 @@ private:
     void PopulateTwoHopNeighborSetLq (const lqolsr::MessageHeader &msg,
                                     const lqolsr::MessageHeader::LqHello &lqhello);
 
-    /**
-     * \brief Updates the MPR Selector Set. This method represents the common case for link quality and traditional olsr
-     * \param nbIntAddresses The interface addresses announced in the HELLO or LQ_HELLO messages
-     * \param originatorAddress The main address of the originator of the HELLO or LQ_HELLO message
-     * \param vTime The vTime of the message
-     * \param now The current time
-     */
-    void PopulateMprSelectorSetCommon (const std::vector<Ipv4Address> & nbIntAddresses,
-				  const Ipv4Address & originatorAddress, Time vTime, Time now );
-
    /**
    * \brief Updates the MPR Selector Set according to the information contained in
    * a new received HELLO message (following \RFC{3626}).
@@ -983,9 +907,9 @@ private:
    * \param hello The received HELLO sub-message.
    */
   void PopulateMprSelectorSet (const lqolsr::MessageHeader &msg,
-                               const lqolsr::MessageHeader::Hello &hello);
+                               const lqolsr::MessageHeader::LqHello &hello);
 
-  int Degree (NeighborTuple const &tuple);
+
   /// Check that address is one of my interfaces
   bool IsMyOwnAddress (const Ipv4Address & a) const;
 

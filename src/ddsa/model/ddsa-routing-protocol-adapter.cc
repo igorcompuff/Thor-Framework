@@ -216,9 +216,9 @@ namespace ns3 {
     }
 
     void
-    DdsaRoutingProtocolAdapter::LqRoutingTableComputation ()
+    DdsaRoutingProtocolAdapter::RoutingTableComputation ()
     {
-      RoutingProtocol::LqRoutingTableComputation();
+      RoutingProtocol::RoutingTableComputation();
       BuildEligibleGateways();
     }
 

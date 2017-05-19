@@ -188,13 +188,6 @@ namespace lqolsr {
       case MID_MESSAGE:
         size += m_message.mid.GetSerializedSize ();
         break;
-      case HELLO_MESSAGE:
-        NS_LOG_DEBUG ("Hello Message Size: " << size << " + " << m_message.hello.GetSerializedSize ());
-        size += m_message.hello.GetSerializedSize ();
-        break;
-      case TC_MESSAGE:
-        size += m_message.tc.GetSerializedSize ();
-        break;
       case HNA_MESSAGE:
         size += m_message.hna.GetSerializedSize ();
         break;
@@ -233,12 +226,6 @@ namespace lqolsr {
       case MID_MESSAGE:
         m_message.mid.Serialize (i);
         break;
-      case HELLO_MESSAGE:
-        m_message.hello.Serialize (i);
-        break;
-      case TC_MESSAGE:
-        m_message.tc.Serialize (i);
-        break;
       case HNA_MESSAGE:
         m_message.hna.Serialize (i);
         break;
@@ -259,7 +246,7 @@ namespace lqolsr {
     uint32_t size;
     Buffer::Iterator i = start;
     m_messageType  = (MessageType) i.ReadU8 ();
-    NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= LQ_TC_MESSAGE);
+    NS_ASSERT (m_messageType >= LQ_HELLO_MESSAGE && m_messageType <= HNA_MESSAGE);
     m_vTime  = i.ReadU8 ();
     m_messageSize  = i.ReadNtohU16 ();
     m_originatorAddress = Ipv4Address (i.ReadNtohU32 ());
@@ -272,15 +259,9 @@ namespace lqolsr {
       case MID_MESSAGE:
         size += m_message.mid.Deserialize (i, m_messageSize - OLSR_MSG_HEADER_SIZE);
         break;
-      case HELLO_MESSAGE:
-        size += m_message.hello.Deserialize (i, m_messageSize - OLSR_MSG_HEADER_SIZE);
-        break;
       case LQ_HELLO_MESSAGE:
               size += m_message.lqHello.Deserialize (i, m_messageSize - OLSR_MSG_HEADER_SIZE);
               break;
-      case TC_MESSAGE:
-        size += m_message.tc.Deserialize (i, m_messageSize - OLSR_MSG_HEADER_SIZE);
-        break;
       case LQ_TC_MESSAGE:
 	size += m_message.lqTc.Deserialize (i, m_messageSize - OLSR_MSG_HEADER_SIZE);
         break;
@@ -336,95 +317,6 @@ namespace lqolsr {
       }
 
     return GetSerializedSize ();
-  }
-
-  // ---------------- OLSR HELLO Message -------------------------------
-
-  uint32_t
-  MessageHeader::Hello::GetSerializedSize (void) const
-  {
-    uint32_t size = 4;
-    for (std::vector<LinkMessage>::const_iterator iter = this->linkMessages.begin ();
-         iter != this->linkMessages.end (); iter++)
-      {
-        const LinkMessage &lm = *iter;
-        size += 4;
-        size += IPV4_ADDRESS_SIZE * lm.neighborInterfaceAddresses.size ();
-      }
-    return size;
-  }
-
-  void
-  MessageHeader::Hello::Print (std::ostream &os) const
-  {
-    /// \todo
-  }
-
-  void
-  MessageHeader::Hello::Serialize (Buffer::Iterator start) const
-  {
-    Buffer::Iterator i = start;
-
-    i.WriteU16 (0); // Reserved
-    i.WriteU8 (this->hTime);
-    i.WriteU8 (this->willingness);
-
-    for (std::vector<LinkMessage>::const_iterator iter = this->linkMessages.begin ();
-         iter != this->linkMessages.end (); iter++)
-      {
-        const LinkMessage &lm = *iter;
-
-        i.WriteU8 (lm.linkCode);
-        i.WriteU8 (0); // Reserved
-
-        // The size of the link message, counted in bytes and measured
-        // from the beginning of the "Link Code" field and until the
-        // next "Link Code" field (or - if there are no more link types
-        // - the end of the message).
-        i.WriteHtonU16 (4 + lm.neighborInterfaceAddresses.size () * IPV4_ADDRESS_SIZE);
-
-        for (std::vector<Ipv4Address>::const_iterator neigh_iter = lm.neighborInterfaceAddresses.begin ();
-             neigh_iter != lm.neighborInterfaceAddresses.end (); neigh_iter++)
-          {
-            i.WriteHtonU32 (neigh_iter->Get ());
-          }
-      }
-  }
-
-  uint32_t
-  MessageHeader::Hello::Deserialize (Buffer::Iterator start, uint32_t messageSize)
-  {
-    Buffer::Iterator i = start;
-
-    NS_ASSERT (messageSize >= 4);
-
-    this->linkMessages.clear ();
-
-    uint16_t helloSizeLeft = messageSize;
-
-    i.ReadNtohU16 (); // Reserved
-    this->hTime = i.ReadU8 ();
-    this->willingness = i.ReadU8 ();
-
-    helloSizeLeft -= 4;
-
-    while (helloSizeLeft)
-      {
-        LinkMessage lm;
-        NS_ASSERT (helloSizeLeft >= 4);
-        lm.linkCode = i.ReadU8 ();
-        i.ReadU8 (); // Reserved
-        uint16_t lmSize = i.ReadNtohU16 ();
-        NS_ASSERT ((lmSize - 4) % IPV4_ADDRESS_SIZE == 0);
-        for (int n = (lmSize - 4) / IPV4_ADDRESS_SIZE; n; --n)
-          {
-            lm.neighborInterfaceAddresses.push_back (Ipv4Address (i.ReadNtohU32 ()));
-          }
-        helloSizeLeft -= lmSize;
-        this->linkMessages.push_back (lm);
-      }
-
-    return messageSize;
   }
 
   // ---------------- OLSR LQ_HELLO Message -------------------------------
@@ -515,56 +407,6 @@ namespace lqolsr {
           }
         helloSizeLeft -= lmSize;
         this->linkMessages.push_back (lm);
-      }
-
-    return messageSize;
-  }
-
-  // ---------------- OLSR TC Message -------------------------------
-
-  uint32_t
-  MessageHeader::Tc::GetSerializedSize (void) const
-  {
-    return 4 + this->neighborAddresses.size () * IPV4_ADDRESS_SIZE;
-  }
-
-  void
-  MessageHeader::Tc::Print (std::ostream &os) const
-  {
-    /// \todo
-  }
-
-  void
-  MessageHeader::Tc::Serialize (Buffer::Iterator start) const
-  {
-    Buffer::Iterator i = start;
-
-    i.WriteHtonU16 (this->ansn);
-    i.WriteHtonU16 (0); // Reserved
-
-    for (std::vector<Ipv4Address>::const_iterator iter = this->neighborAddresses.begin ();
-         iter != this->neighborAddresses.end (); iter++)
-      {
-        i.WriteHtonU32 (iter->Get ());
-      }
-  }
-
-  uint32_t
-  MessageHeader::Tc::Deserialize (Buffer::Iterator start, uint32_t messageSize)
-  {
-    Buffer::Iterator i = start;
-
-    NS_ASSERT (messageSize >= 4);
-
-    this->ansn = i.ReadNtohU16 ();
-    i.ReadNtohU16 (); // Reserved
-
-    NS_ASSERT ((messageSize - 4) % IPV4_ADDRESS_SIZE == 0);
-    int numAddresses = (messageSize - 4) / IPV4_ADDRESS_SIZE;
-    this->neighborAddresses.clear ();
-    for (int n = 0; n < numAddresses; ++n)
-      {
-        this->neighborAddresses.push_back (Ipv4Address (i.ReadNtohU32 ()));
       }
 
     return messageSize;

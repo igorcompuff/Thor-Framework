@@ -154,68 +154,6 @@ OlsrMidTestCase::DoRun (void)
   }
 }
 
-
-class OlsrHelloTestCase : public TestCase
-{
-public:
-  OlsrHelloTestCase ();
-  virtual void DoRun (void);
-};
-
-OlsrHelloTestCase::OlsrHelloTestCase ()
-  : TestCase ("Check Hello olsr messages")
-{
-}
-void
-OlsrHelloTestCase::DoRun (void)
-{
-  Packet packet;
-  lqolsr::MessageHeader msgIn;
-  lqolsr::MessageHeader::Hello &helloIn = msgIn.GetHello ();
-
-  helloIn.SetHTime (Seconds (7));
-  helloIn.willingness = 66;
-
-  {
-    lqolsr::MessageHeader::Hello::LinkMessage lm1;
-    lm1.linkCode = 2;
-    lm1.neighborInterfaceAddresses.push_back (Ipv4Address ("1.2.3.4"));
-    lm1.neighborInterfaceAddresses.push_back (Ipv4Address ("1.2.3.5"));
-    helloIn.linkMessages.push_back (lm1);
-
-    lqolsr::MessageHeader::Hello::LinkMessage lm2;
-    lm2.linkCode = 3;
-    lm2.neighborInterfaceAddresses.push_back (Ipv4Address ("2.2.3.4"));
-    lm2.neighborInterfaceAddresses.push_back (Ipv4Address ("2.2.3.5"));
-    helloIn.linkMessages.push_back (lm2);
-  }
-
-  packet.AddHeader (msgIn);
-
-  lqolsr::MessageHeader msgOut;
-  packet.RemoveHeader (msgOut);
-  lqolsr::MessageHeader::Hello &helloOut = msgOut.GetHello ();
-
-  NS_TEST_ASSERT_MSG_EQ (helloOut.GetHTime (), Seconds (7), "300");
-  NS_TEST_ASSERT_MSG_EQ (helloOut.willingness, 66, "301");
-  NS_TEST_ASSERT_MSG_EQ (helloOut.linkMessages.size (), 2, "302");
-
-  NS_TEST_ASSERT_MSG_EQ (helloOut.linkMessages[0].linkCode, 2, "303");
-  NS_TEST_ASSERT_MSG_EQ (helloOut.linkMessages[0].neighborInterfaceAddresses[0],
-                         Ipv4Address ("1.2.3.4"), "304");
-  NS_TEST_ASSERT_MSG_EQ (helloOut.linkMessages[0].neighborInterfaceAddresses[1],
-                         Ipv4Address ("1.2.3.5"), "305");
-
-  NS_TEST_ASSERT_MSG_EQ (helloOut.linkMessages[1].linkCode, 3, "306");
-  NS_TEST_ASSERT_MSG_EQ (helloOut.linkMessages[1].neighborInterfaceAddresses[0],
-                         Ipv4Address ("2.2.3.4"), "307");
-  NS_TEST_ASSERT_MSG_EQ (helloOut.linkMessages[1].neighborInterfaceAddresses[1],
-                         Ipv4Address ("2.2.3.5"), "308");
-
-  NS_TEST_ASSERT_MSG_EQ (packet.GetSize (), 0, "All bytes in packet were not read");
-
-}
-
 class LqOlsrHelloTestCase : public TestCase
 {
 public:
@@ -297,45 +235,6 @@ LqOlsrHelloTestCase::DoRun (void)
                            60, "308.b");
 
   NS_TEST_ASSERT_MSG_EQ (packet.GetSize (), 0, "All bytes in packet were not read");
-
-}
-
-class OlsrTcTestCase : public TestCase
-{
-public:
-  OlsrTcTestCase ();
-  virtual void DoRun (void);
-};
-
-OlsrTcTestCase::OlsrTcTestCase ()
-  : TestCase ("Check Tc olsr messages")
-{
-}
-void
-OlsrTcTestCase::DoRun (void)
-{
-  Packet packet;
-  lqolsr::MessageHeader msgIn;
-  lqolsr::MessageHeader::Tc &tcIn = msgIn.GetTc ();
-
-  tcIn.ansn = 0x1234;
-  tcIn.neighborAddresses.push_back (Ipv4Address ("1.2.3.4"));
-  tcIn.neighborAddresses.push_back (Ipv4Address ("1.2.3.5"));
-  packet.AddHeader (msgIn);
-
-  lqolsr::MessageHeader msgOut;
-  packet.RemoveHeader (msgOut);
-  lqolsr::MessageHeader::Tc &tcOut = msgOut.GetTc ();
-
-  NS_TEST_ASSERT_MSG_EQ (tcOut.ansn, 0x1234, "400");
-  NS_TEST_ASSERT_MSG_EQ (tcOut.neighborAddresses.size (), 2, "401");
-
-  NS_TEST_ASSERT_MSG_EQ (tcOut.neighborAddresses[0],
-                         Ipv4Address ("1.2.3.4"), "402");
-  NS_TEST_ASSERT_MSG_EQ (tcOut.neighborAddresses[1],
-                         Ipv4Address ("1.2.3.5"), "403");
-
-  NS_TEST_ASSERT_MSG_EQ (packet.GetSize (), 0, "404");
 
 }
 
@@ -441,10 +340,8 @@ OlsrTestSuite::OlsrTestSuite ()
   : TestSuite ("routing-lqolsr-header", UNIT)
 {
   AddTestCase (new OlsrHnaTestCase (), TestCase::QUICK);
-  //AddTestCase (new OlsrTcTestCase (), TestCase::QUICK);
   AddTestCase (new LqOlsrTcTestCase (), TestCase::QUICK);
-  AddTestCase (new OlsrHelloTestCase (), TestCase::QUICK);
-  //AddTestCase (new LqOlsrHelloTestCase (), TestCase::QUICK);
+  AddTestCase (new LqOlsrHelloTestCase (), TestCase::QUICK);
   AddTestCase (new OlsrMidTestCase (), TestCase::QUICK);
   AddTestCase (new OlsrEmfTestCase (), TestCase::QUICK);
 }
