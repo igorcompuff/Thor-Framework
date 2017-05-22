@@ -450,11 +450,11 @@ private:
   void
   InitializeDestinations();
 
-  DestinationTuple *
+  int
   GetMinDestination();
 
   void
-  UpdateDestinationNeighbors(const DestinationTuple * dest);
+  UpdateDestinationNeighbors(const DestinationTuple & dest);
 
 
   /**
@@ -811,7 +811,7 @@ private:
    * \param lastAddress The address of the node just before the destination node
    */
   void CreateTopologyTuple(TopologyTuple & tuple, const Ipv4Address & destAddress,
-			   const Ipv4Address & lastAddress, uint16_t seqNumber, Time expirationTime);
+			   const Ipv4Address & lastAddress, uint16_t seqNumber, Time expirationTime, float cost);
 
   /**
    * \brief Processes a TC message following \RFC{3626} specification.

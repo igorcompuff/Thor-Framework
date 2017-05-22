@@ -640,8 +640,10 @@ RoutingProtocol::InitializeDestinations()
 	dest.destAddress = top->destAddr;
 	dest.accessLink = NULL;
 
-	if (std::find(m_destinations.begin(),
-		      m_destinations.end(), dest) == m_destinations.end())
+	bool myself = top->destAddr == m_mainAddress;
+	bool alreadyAdded = std::find(m_destinations.begin(), m_destinations.end(), dest) != m_destinations.end();
+
+	if (!myself and !alreadyAdded)
 	  {
 	    m_destinations.push_back(dest);
 	    m_costs[top->destAddr] = m_metric->GetInfinityCostValue();
@@ -649,62 +651,57 @@ RoutingProtocol::InitializeDestinations()
     }
 }
 
-DestinationTuple*
+int
 RoutingProtocol::GetMinDestination()
 {
-  std::vector<DestinationTuple>::iterator bestDestination = m_destinations.end();
+  int index = 0;
+  int selectedIndex = -1;
   float bestCost = m_metric->GetInfinityCostValue();
 
-  for(std::vector<DestinationTuple>::iterator it = m_destinations.begin();
-      it != m_destinations.end(); it++)
+  for(std::vector<DestinationTuple>::iterator it = m_destinations.begin(); it != m_destinations.end(); it++)
     {
       float costTest = m_costs[it->destAddress];
 
-      if (bestDestination == m_destinations.end() || m_metric->CompareBest(costTest, bestCost) > 0)
+      if (selectedIndex < 0 || m_metric->CompareBest(costTest, bestCost) > 0)
       {
-	  bestDestination = it;
+	  selectedIndex = index;
 	  bestCost = costTest;
       }
+
+      index++;
     }
 
-  if (bestDestination != m_destinations.end())
-    {
-      DestinationTuple* best = &(*bestDestination);
-      m_destinations.erase(bestDestination);
-
-      return best;
-    }
-
-  return NULL;
+  return selectedIndex;
 }
 
 void
-RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple * dest)
+RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple & dest)
 {
 
   const TopologySet &topology = m_state.GetTopologySet ();
   for (TopologySet::const_iterator top = topology.begin ();
       top != topology.end (); top++)
     {
-      if (top->lastAddr == dest->destAddress)
+      DestinationTuple destNeighbor;
+      destNeighbor.destAddress = top->destAddr;
+
+      std::vector<DestinationTuple>::iterator it = std::find(m_destinations.begin(),
+							     m_destinations.end(),
+							     destNeighbor);
+      if (it == m_destinations.end())
+	{
+	  continue;
+	}
+
+      if (top->lastAddr == dest.destAddress)
 	{
 	  float currentCost = m_costs[top->destAddr];
-	  float newCost = m_metric->Compound(m_costs[dest->destAddress], top->cost);
+	  float newCost = m_metric->Compound(m_costs[dest.destAddress], top->cost);
 
 	  if (m_metric->CompareBest(newCost, currentCost) > 0)
 	    {
 	      m_costs[top->destAddr] = newCost;
-
-	      DestinationTuple destNeighbor;
-	      destNeighbor.destAddress = top->destAddr;
-
-	      std::vector<DestinationTuple>::iterator it = std::find(m_destinations.begin(),
-								     m_destinations.end(),
-								     destNeighbor);
-	      if (it != m_destinations.end())
-		{
-		  it->accessLink = dest->accessLink;
-		}
+	      it->accessLink = dest.accessLink;
 	    }
 	}
     }
@@ -723,21 +720,25 @@ RoutingProtocol::RoutingTableComputation ()
 
   while (!done)
     {
-      DestinationTuple * selected = GetMinDestination();
+      int selectedIndex = GetMinDestination();
 
-      if (selected == NULL)
-      {
-	done = true;
-      }
+      if (selectedIndex >= 0)
+	{
+	  std::vector<DestinationTuple>::iterator selectedIt = m_destinations.begin() + selectedIndex;
+	  DestinationTuple selectedDest = *selectedIt;
+
+	  AddLqEntry(selectedDest.destAddress, selectedDest.accessLink->neighborIfaceAddr,
+		     selectedDest.accessLink->localIfaceAddr,
+		     m_costs[selectedDest.destAddress]);
+
+	  m_destinations.erase(selectedIt);
+
+	  UpdateDestinationNeighbors(selectedDest);
+	}
       else
-      {
-	AddLqEntry(selected->destAddress, selected->accessLink->neighborIfaceAddr,
-		   selected->accessLink->localIfaceAddr,
-		   m_costs[selected->destAddress]);
-
-	UpdateDestinationNeighbors(selected);
-      }
-
+	{
+	  done = true;
+	}
     }
 
     // For each entry in the multiple interface association base
@@ -906,14 +907,13 @@ RoutingProtocol::ProcessHello (const lqolsr::MessageHeader &msg,
 
 void
 RoutingProtocol::CreateTopologyTuple(TopologyTuple & tuple, const Ipv4Address & destAddress,
-				     const Ipv4Address & lastAddress, uint16_t seqNumber, Time expirationTime)
+				     const Ipv4Address & lastAddress, uint16_t seqNumber, Time expirationTime, float cost)
 {
-  TopologyTuple topologyTuple;
-  topologyTuple.destAddr = destAddress;
-  topologyTuple.lastAddr = lastAddress;
-  topologyTuple.sequenceNumber = seqNumber;
-  topologyTuple.expirationTime = expirationTime;
-  AddTopologyTuple (topologyTuple);
+  tuple.destAddr = destAddress;
+  tuple.lastAddr = lastAddress;
+  tuple.sequenceNumber = seqNumber;
+  tuple.expirationTime = expirationTime;
+  tuple.cost = cost;
 }
 
 void
@@ -964,10 +964,12 @@ RoutingProtocol::ProcessTc (const lqolsr::MessageHeader &msg,
 
       TopologyTuple *topologyTuple = m_state.FindTopologyTuple (addr, msg.GetOriginatorAddress());
 
+      float cost = unpack754_32(info->metricInfo);
+
       if (topologyTuple != NULL)
 	{
 	  topologyTuple->expirationTime = msg.GetVTime() + now;
-	  topologyTuple->cost = unpack754_32(info->metricInfo);
+	  topologyTuple->cost = cost;
 	}
       else
 	{
@@ -980,8 +982,7 @@ RoutingProtocol::ProcessTc (const lqolsr::MessageHeader &msg,
 
 	  TopologyTuple topologyTuple;
 
-	  CreateTopologyTuple(topologyTuple, addr, msg.GetOriginatorAddress(), tc.ansn, msg.GetVTime() + now);
-	  topologyTuple.cost = unpack754_32(info->metricInfo);
+	  CreateTopologyTuple(topologyTuple, addr, msg.GetOriginatorAddress(), tc.ansn, msg.GetVTime() + now, cost);
 
 	  AddTopologyTuple (topologyTuple);
 
