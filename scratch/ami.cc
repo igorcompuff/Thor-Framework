@@ -278,7 +278,8 @@ int main (int argc, char *argv[])
   wifiPhy.EnablePcap ("olsr-hna", devices);
   csma.EnablePcap ("csma", csmaDevices, false);
 
-  LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
+  //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
+  LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
   //LogComponentEnable("Etx", LOG_LEVEL_ALL);
 
   Simulator::ScheduleWithContext (source->GetNode ()->GetId (),

@@ -2817,6 +2817,12 @@ RoutingProtocol::IsMyOwnAddress (const Ipv4Address & a) const
   return false;
 }
 
+Ipv4Address
+RoutingProtocol::GetMyMainAddress()
+{
+  return m_mainAddress;
+}
+
 void
 RoutingProtocol::Dump (void)
 {

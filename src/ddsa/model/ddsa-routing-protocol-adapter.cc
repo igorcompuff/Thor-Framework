@@ -152,6 +152,17 @@ namespace ns3 {
 	  it++;
 	}
 
+      Ipv4Address m_address = GetMyMainAddress();
+      if (selectedDap.address != Ipv4Address::GetBroadcast())
+	{
+	  NS_LOG_DEBUG("Dap: " << selectedDap.address << " selected by " << m_address);
+	}
+      else
+	{
+	  NS_LOG_DEBUG("No DAP Selected by node " << m_address);
+	}
+
+
       return selectedDap;
     }
 

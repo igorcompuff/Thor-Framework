@@ -242,6 +242,8 @@ protected:
   // From Ipv4RoutingProtocol
   virtual Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
 
+  Ipv4Address GetMyMainAddress();
+
   /**
    *
    * \brief Processes a HNA message following \RFC{3626} specification.
