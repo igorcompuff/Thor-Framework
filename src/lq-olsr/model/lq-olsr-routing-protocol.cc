@@ -534,9 +534,27 @@ RoutingProtocol::RecvOlsr (Ptr<Socket> socket)
         }
     }
 
+
+
     m_metric->NotifyMessageReceived(olsrPacketHeader.GetPacketSequenceNumber(), messagesToMetricProcessing,
 				    receiverIfaceAddr, senderIfaceAddr);
     RoutingTableComputation ();
+}
+
+bool
+RoutingProtocol::HasLinkTo(const Ipv4Address & neighbor)
+{
+  LinkSet links = m_state.GetLinks();
+
+  for (std::vector<LinkTuple>::iterator it = links.begin(); it != links.end(); it++)
+    {
+      if (it->neighborIfaceAddr == neighbor)
+	{
+	  return true;
+	}
+    }
+
+  return false;
 }
 
 //This Mpr implementation simply enable all symetric neighbors as Mpr

@@ -150,6 +150,8 @@ public:
    */
   int64_t AssignStreams (int64_t stream);
 
+  bool HasLinkTo(const Ipv4Address & neighbor);
+
   /**
    * TracedCallback signature for Packet transmit and receive events.
    *

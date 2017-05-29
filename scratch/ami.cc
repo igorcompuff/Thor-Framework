@@ -60,6 +60,7 @@
 #include "ns3/ddsa-routing-protocol-adapter.h"
 //#include "ns3/olsr-routing-protocol.h"
 #include "ns3/ddsa-helper.h"
+#include "ns3/lq-olsr-helper.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -195,21 +196,31 @@ int main (int argc, char *argv[])
   csma.SetChannelAttribute ("Delay", TimeValue (MilliSeconds (2)));
   NetDeviceContainer csmaDevices = csma.Install (NodeContainer (csmaNodes.Get (0), olsrNodes.Get (1), olsrNodes.Get(2)));
 
-  DDsaHelper ddsa (Etx::GetTypeId());
+  TypeId metricTid = Etx::GetTypeId();
 
-  // Specify Node B's csma device as a non-OLSR device.
-  ddsa.ExcludeInterface (olsrNodes.Get (1), 2);
-  ddsa.ExcludeInterface (olsrNodes.Get (2), 2);
+  LqOlsrHelper olsrHelper(metricTid);
+  olsrHelper.ExcludeInterface (olsrNodes.Get (1), 2);
+  olsrHelper.ExcludeInterface (olsrNodes.Get (2), 2);
+
+  DDsaHelper ddsaHelper(metricTid);
+
 
   Ipv4StaticRoutingHelper staticRouting;
 
-  Ipv4ListRoutingHelper list;
-  list.Add (staticRouting, 0);
-  list.Add (ddsa, 10);
+  Ipv4ListRoutingHelper listMeters;
+  listMeters.Add (staticRouting, 0);
+  listMeters.Add (ddsaHelper, 10);
+
+  Ipv4ListRoutingHelper listDaps;
+  listDaps.Add (staticRouting, 0);
+  listDaps.Add (olsrHelper, 10);
 
   InternetStackHelper internet_olsr;
-  internet_olsr.SetRoutingHelper (list); // has effect on the next Install ()
-  internet_olsr.Install (olsrNodes);
+  internet_olsr.SetRoutingHelper (listMeters); // has effect on the next Install ()
+  internet_olsr.Install (NodeContainer (olsrNodes.Get (0)));
+
+  internet_olsr.SetRoutingHelper (listDaps); // has effect on the next Install ()
+  internet_olsr.Install (NodeContainer (olsrNodes.Get (1), olsrNodes.Get (2)));
 
   InternetStackHelper internet_csma;
   internet_csma.Install (csmaNodes);
@@ -223,10 +234,15 @@ int main (int argc, char *argv[])
   ipv4.Assign (csmaDevices);
 
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
-  Ptr<Socket> recvSink = Socket::CreateSocket (csmaNodes.Get (0), tid);
   InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), 80);
-  recvSink->Bind (local);
-  recvSink->SetRecvCallback (MakeCallback (&ReceivePacket));
+
+  Ptr<Socket> recvDap1 = Socket::CreateSocket (olsrNodes.Get (1), tid);
+  recvDap1->Bind (local);
+  recvDap1->SetRecvCallback (MakeCallback (&ReceivePacket));
+
+  Ptr<Socket> recvDap2 = Socket::CreateSocket (olsrNodes.Get (2), tid);
+  recvDap2->Bind (local);
+  recvDap2->SetRecvCallback (MakeCallback (&ReceivePacket));
 
   Ptr<Socket> source = Socket::CreateSocket (olsrNodes.Get (0), tid);
   InetSocketAddress remote = InetSocketAddress (Ipv4Address ("172.16.1.1"), 80);
@@ -241,15 +257,15 @@ int main (int argc, char *argv[])
 	  Ptr<Ipv4RoutingProtocol> rp_Gw = (stack->GetRoutingProtocol ());
 	  Ptr<Ipv4ListRouting> lrp_Gw = DynamicCast<Ipv4ListRouting> (rp_Gw);
 
-	  Ptr<ddsa::DdsaRoutingProtocolAdapter> ddsa_rpa;
+	  Ptr<lqolsr::RoutingProtocol> lqolsr_rp;
 
 	  for (uint32_t i = 0; i < lrp_Gw->GetNRoutingProtocols ();  i++)
 	  {
 		  int16_t priority;
 		  Ptr<Ipv4RoutingProtocol> temp = lrp_Gw->GetRoutingProtocol (i, priority);
-		  if (DynamicCast<ddsa::DdsaRoutingProtocolAdapter> (temp))
+		  if (DynamicCast<lqolsr::RoutingProtocol> (temp))
 		  {
-		      ddsa_rpa = DynamicCast<ddsa::DdsaRoutingProtocolAdapter> (temp);
+		      lqolsr_rp = DynamicCast<lqolsr::RoutingProtocol> (temp);
 		  }
 	  }
 
@@ -264,13 +280,13 @@ int main (int argc, char *argv[])
 		  // and have the node generate HNA messages for all these routes
 		  // which are associated with non-OLSR interfaces specified above.
 		  hnaEntries->AddNetworkRouteTo (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"), uint32_t (2), uint32_t (1));
-		  ddsa_rpa->SetRoutingTableAssociation (hnaEntries);
+		  lqolsr_rp->SetRoutingTableAssociation (hnaEntries);
 	  }
 
 	  if (assocMethod2)
 	  {
 		  // Specify the required associations directly.
-		  ddsa_rpa->AddHostNetworkAssociation (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"));
+	      lqolsr_rp->AddHostNetworkAssociation (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"));
 	  }
   }
 
@@ -280,7 +296,7 @@ int main (int argc, char *argv[])
 
   //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
   LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
-  //LogComponentEnable("Etx", LOG_LEVEL_ALL);
+  LogComponentEnable("Etx", LOG_LEVEL_ALL);
 
   Simulator::ScheduleWithContext (source->GetNode ()->GetId (),
                                   Seconds (5.0), &GenerateTraffic,

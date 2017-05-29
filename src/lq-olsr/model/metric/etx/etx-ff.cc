@@ -15,10 +15,10 @@ namespace lqmetric{
 Etx::Etx()
 {
   etx_memory_length = 32;
-  etx_metric_interval = Seconds(1.0);
+  etx_metric_interval = Seconds(4.0);
   etx_seqno_restart_detection = 256;
   etx_hello_timeout_factor = 1.5;
-  etx_perfect_metric = DEFAULT_METRIC * 0.1;
+  etx_perfect_metric = 1;
 }
 
 
@@ -73,6 +73,7 @@ Etx::NotifyMessageReceived(uint16_t packetSeqNumber,
                            const Ipv4Address &senderIface)
 {
   bool created = false;
+
   std::map<Ipv4Address, EtxInfo>::iterator it = m_links_info.find(senderIface);
 
   EtxInfo * info;
@@ -198,19 +199,27 @@ Etx::Compute(EtxInfo * info)
   if (sum_penalty < 1)
     {
       info->metric_r_etx = UNDEFINED_R_ETX;
-      info->metricValue = MAXIMUM_METRIC;
+      info->metricValue = INFINITY_COST;
     }
   else
     {
-      info->metric_r_etx = sum_total / sum_penalty;
-
       if (info->metric_d_etx == UNDEFINED_R_ETX)
 	{
-	  info->metricValue = DEFAULT_METRIC;
+	  info->metricValue = INFINITY_COST;
 	}
       else
 	{
-	  info->metricValue = etx_perfect_metric * info->metric_d_etx * info->metric_r_etx;
+	  info->metric_r_etx = sum_total / sum_penalty;
+	  float x = (etx_perfect_metric * info->metric_d_etx * info->metric_r_etx);
+
+	  if (x > 0)
+	    {
+	      info->metricValue = 1 / x;
+	    }
+	  else
+	    {
+	      info->metricValue = INFINITY_COST;
+	    }
 	}
     }
 
@@ -239,11 +248,11 @@ Etx::GetCost(const Ipv4Address & neighborIfaceAddress)
 {
   std::map<Ipv4Address, EtxInfo>::iterator it = m_links_info.find(neighborIfaceAddress);
 
-  float cost = MAXIMUM_METRIC;
+  float cost = INFINITY_COST;
 
   if (it != m_links_info.end())
     {
-      cost = 1/it->second.metricValue;
+      cost = it->second.metricValue;
     }
 
   NS_LOG_DEBUG("Cost to " << neighborIfaceAddress << " is " << cost);
@@ -260,7 +269,7 @@ Etx::GetCost(uint32_t metricInfo)
 float
 Etx::GetInfinityCostValue()
 {
-  return MAXIMUM_METRIC;
+  return INFINITY_COST;
 }
 
 int

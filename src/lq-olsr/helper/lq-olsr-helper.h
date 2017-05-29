@@ -46,6 +46,8 @@ public:
    */
   LqOlsrHelper ();
 
+  LqOlsrHelper (const TypeId & tid);
+
   /**
    * \brief Construct an OlsrHelper from another previously initialized instance
    * (Copy Constructor).
@@ -104,6 +106,7 @@ private:
    */
   LqOlsrHelper &operator = (const LqOlsrHelper &);
   ObjectFactory m_agentFactory; //!< Object factory
+  ObjectFactory m_metricFactory; //!< Object factory
 
   std::map< Ptr<Node>, std::set<uint32_t> > m_interfaceExclusions; //!< container of interfaces excluded from OLSR operations
 };

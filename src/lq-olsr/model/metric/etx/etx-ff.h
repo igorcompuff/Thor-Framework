@@ -33,6 +33,7 @@
 #include "ns3/lq-metric.h"
 #include "ns3/packet.h"
 #include "ns3/event-garbage-collector.h"
+#include "ns3/lq-olsr-routing-protocol.h"
 
 
 namespace ns3 {
@@ -109,9 +110,8 @@ class Etx: public LqAbstractMetric
 
     virtual MetricType GetMetricType();
 
-    //Defined in https://tools.ietf.org/html/draft-dearlove-olsrv2-metrics-05, section 4.6
-    static constexpr float DEFAULT_METRIC = 4096;
-    static constexpr float MAXIMUM_METRIC = 1015808;
+    //This cost is achieved when the link has a delivery probability lower than 1% in both directions
+    static constexpr float INFINITY_COST = 124;
 
     static constexpr float UNDEFINED_R_ETX = -1;
     static const uint16_t MAX_SEQ_NUM = 65535;

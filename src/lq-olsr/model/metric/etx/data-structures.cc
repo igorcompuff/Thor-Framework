@@ -26,7 +26,7 @@ EtxInfo::Initialize(std::vector<int>::size_type max_size)
   metric_r_etx = Etx::UNDEFINED_R_ETX;
   metricHelloInterval = Time::Min();
   metricTotalLifo.Push(0);
-  metricValue = Etx::MAXIMUM_METRIC;
+  metricValue = Etx::INFINITY_COST;
   metricLastPktSeqno.isUndefined = true;
   metricLastPktSeqno.m_sequenceNumber = 0;
 }

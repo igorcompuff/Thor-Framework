@@ -111,7 +111,6 @@ private:
   ObjectFactory m_metricFactory; //!< Object factory
 
   std::map< Ptr<Node>, std::set<uint32_t> > m_interfaceExclusions; //!< container of interfaces excluded from OLSR operations
-  bool isLinkQuality;
 };
 
 } // namespace ns3

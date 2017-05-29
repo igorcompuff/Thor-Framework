@@ -23,16 +23,24 @@
 #include "ns3/names.h"
 #include "ns3/ptr.h"
 #include "ns3/ipv4-list-routing.h"
+#include "ns3/lq-metric.h"
 
 namespace ns3 {
 
 LqOlsrHelper::LqOlsrHelper ()
 {
   m_agentFactory.SetTypeId ("ns3::lqolsr::RoutingProtocol");
+  m_metricFactory.SetTypeId("ns3::lqmetric::Etx");
+}
+
+LqOlsrHelper::LqOlsrHelper (const TypeId & tid)
+{
+  m_agentFactory.SetTypeId ("ns3::lqolsr::RoutingProtocol");
+  m_metricFactory.SetTypeId(tid);
 }
 
 LqOlsrHelper::LqOlsrHelper (const LqOlsrHelper &o)
-  : m_agentFactory (o.m_agentFactory)
+  : m_agentFactory (o.m_agentFactory), m_metricFactory (o.m_metricFactory)
 {
   m_interfaceExclusions = o.m_interfaceExclusions;
 }
@@ -65,6 +73,8 @@ Ptr<Ipv4RoutingProtocol>
 LqOlsrHelper::Create (Ptr<Node> node) const
 {
   Ptr<lqolsr::RoutingProtocol> agent = m_agentFactory.Create<lqolsr::RoutingProtocol> ();
+  Ptr<lqmetric::LqAbstractMetric> metric = m_metricFactory.Create<lqmetric::LqAbstractMetric>();
+  agent->SetLqMetric(metric);
 
   std::map<Ptr<Node>, std::set<uint32_t> >::const_iterator it = m_interfaceExclusions.find (node);
 
