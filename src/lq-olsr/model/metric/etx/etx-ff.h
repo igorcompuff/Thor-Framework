@@ -66,7 +66,7 @@ class Etx: public LqAbstractMetric
      */
     virtual float GetCost(uint32_t metricInfo);
 
-    virtual uint32_t GetMetricInfo(const Ipv4Address & neighborIfaceAddress);
+    virtual uint32_t GetHelloInfo(const Ipv4Address & neighborIfaceAddress);
 
     /*
      * Get the highest link cost possible.

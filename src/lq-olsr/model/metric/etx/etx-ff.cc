@@ -15,7 +15,7 @@ namespace lqmetric{
 Etx::Etx()
 {
   etx_memory_length = 32;
-  etx_metric_interval = Seconds(4.0);
+  etx_metric_interval = Seconds(2.0);
   etx_seqno_restart_detection = 256;
   etx_hello_timeout_factor = 1.5;
   etx_perfect_metric = 1;
@@ -38,7 +38,8 @@ Etx::GetTypeId()
 float
 Etx::Compound(float cost1, float cost2)
 {
-  return cost1 + cost2;
+  float newCost = cost1 + cost2;
+  return newCost >= INFINITY_COST ? INFINITY_COST : newCost;
 }
 
 LqAbstractMetric::MetricType
@@ -55,13 +56,11 @@ Etx::Timeout(EtxInfo * info, const Time & expirationTime)
   if (info->metricHelloTime == expirationTime)
     {
       info->metricLostHellos++;
+      NS_LOG_DEBUG("Hello Expired. N Lost hellos = " << info->metricLostHellos);
       info->metricHelloTime = info->metricHelloTime + info->metricHelloInterval;
 
-      m_events.Track (Simulator::Schedule (DELAY (info->metricHelloTime),
-         					       &Etx::Timeout,
-         					       this,
-         					       info,
-         					       info->metricHelloTime));
+      Time nextSched = Simulator::Now() + info->metricHelloTime;
+      m_events.Track (Simulator::Schedule (DELAY (nextSched), &Etx::Timeout, this, info, info->metricHelloTime));
     }
 
 }
@@ -72,6 +71,10 @@ Etx::NotifyMessageReceived(uint16_t packetSeqNumber,
                            const Ipv4Address &receiverIface,
                            const Ipv4Address &senderIface)
 {
+  NS_LOG_DEBUG("New Packet Received: " << senderIface << " --> " << receiverIface
+	       << " (sqNum = " <<  packetSeqNumber << ")");
+
+
   bool created = false;
 
   std::map<Ipv4Address, EtxInfo>::iterator it = m_links_info.find(senderIface);
@@ -100,11 +103,10 @@ Etx::NotifyMessageReceived(uint16_t packetSeqNumber,
 
   if (created)
     {
-      m_events.Track (Simulator::Schedule (DELAY (info->metricHelloTime), &Etx::Timeout, this, info, info->metricHelloTime));
-      m_events.Track (Simulator::Schedule (DELAY (etx_metric_interval), &Etx::Compute, this, info));
+      Time now = Simulator::Now();
+      m_events.Track (Simulator::Schedule (DELAY (info->metricHelloTime + now), &Etx::Timeout, this, info, info->metricHelloTime));
+      m_events.Track (Simulator::Schedule (DELAY (etx_metric_interval + now), &Etx::Compute, this, info));
     }
-
-  NS_LOG_DEBUG("Notify finished.");
 }
 
 void
@@ -139,12 +141,18 @@ Etx::PacketProcessing(uint16_t packetSeqNumber, EtxInfo * info)
 
   info->metricLastPktSeqno.m_sequenceNumber = packetSeqNumber;
 
+  NS_LOG_DEBUG("Received = " << info->metricReceivedLifo.GetCurrent() <<
+	       " Total = " << info->metricTotalLifo.GetCurrent() <<
+	       " Last Seq Number = " << info->metricLastPktSeqno.m_sequenceNumber);
+
 }
 
 void
 Etx::HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Address &receiverIface, EtxInfo * info)
 {
   Time currentTime = Simulator::Now();
+
+  NS_LOG_DEBUG("Processing Hello Message");
 
   const lqolsr::MessageHeader::NeighborInterfaceInfo * foundInfo = NULL;
 
@@ -168,7 +176,7 @@ Etx::HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Add
 
   if (foundInfo != NULL)
     {
-      info->metric_d_etx = unpack754_32(foundInfo->metricInfo / info->metric_r_etx);
+      info->metric_d_etx = unpack754_32(foundInfo->metricInfo);
     }
   else
     {
@@ -179,11 +187,14 @@ Etx::HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Add
   info->metricHelloTime = currentTime + etx_hello_timeout_factor * hello.GetHTime();
   info->metricLostHellos = 0;
 
+  NS_LOG_DEBUG("Dx = " << info->metric_d_etx);
+
 }
 
 void
 Etx::Compute(EtxInfo * info)
 {
+  NS_LOG_DEBUG("Computing ETX at " << Simulator::Now().GetSeconds());
   int sum_received = info->metricReceivedLifo.Sum();
   int sum_total = info->metricTotalLifo.Sum();
   float sum_penalty = sum_received;
@@ -194,6 +205,8 @@ Etx::Compute(EtxInfo * info)
       penalty = ((float)info->metricHelloInterval.GetSeconds() * info->metricLostHellos) / etx_memory_length;
 
       sum_penalty -= sum_received * penalty;
+
+      NS_LOG_DEBUG("Has penalty =  " << penalty << " And sum_penalty = " << sum_penalty);
     }
 
   if (sum_penalty < 1)
@@ -203,13 +216,14 @@ Etx::Compute(EtxInfo * info)
     }
   else
     {
+      info->metric_r_etx = sum_total / sum_penalty;
+
       if (info->metric_d_etx == UNDEFINED_R_ETX)
 	{
 	  info->metricValue = INFINITY_COST;
 	}
       else
 	{
-	  info->metric_r_etx = sum_total / sum_penalty;
 	  float x = (etx_perfect_metric * info->metric_d_etx * info->metric_r_etx);
 
 	  if (x > 0)
@@ -226,18 +240,20 @@ Etx::Compute(EtxInfo * info)
   info->metricReceivedLifo.Push(0);
   info->metricTotalLifo.Push(0);
 
-  m_events.Track (Simulator::Schedule (DELAY (etx_metric_interval), &Etx::Compute, this, info));
+  NS_LOG_DEBUG("Computation finished. New cost = " << info->metricValue);
+
+  Time nextSched = Simulator::Now() +  etx_metric_interval;
+  m_events.Track (Simulator::Schedule (DELAY (nextSched), &Etx::Compute, this, info));
 
 }
 
 uint32_t
-Etx::GetMetricInfo(const Ipv4Address & neighborIfaceAddress)
+Etx::GetHelloInfo(const Ipv4Address & neighborIfaceAddress)
 {
   std::map<Ipv4Address, EtxInfo>::iterator it = m_links_info.find(neighborIfaceAddress);
-
   if (it != m_links_info.end())
     {
-      return pack754_32(it->second.metric_r_etx * it->second.metric_d_etx);
+      return pack754_32(it->second.metric_r_etx);
     }
 
   return pack754_32(UNDEFINED_R_ETX);

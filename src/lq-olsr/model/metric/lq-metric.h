@@ -66,7 +66,7 @@ public:
      */
     virtual float GetCost(uint32_t metricInfo) = 0;
 
-    virtual uint32_t GetMetricInfo(const Ipv4Address & neighborIfaceAddress) = 0;
+    virtual uint32_t GetHelloInfo(const Ipv4Address & neighborIfaceAddress) = 0;
 
     /*
      * Get the highest link cost possible.

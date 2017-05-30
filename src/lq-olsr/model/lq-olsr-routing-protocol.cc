@@ -1411,7 +1411,7 @@ RoutingProtocol::SendHello ()
 
       lqolsr::MessageHeader::NeighborInterfaceInfo neigh_info;
       neigh_info.neighborInterfaceAddress = link_tuple->neighborIfaceAddr;
-      neigh_info.metricInfo = m_metric->GetMetricInfo(link_tuple->neighborIfaceAddr);
+      neigh_info.metricInfo = m_metric->GetHelloInfo(link_tuple->neighborIfaceAddr);
 
       linkMessage.neighborInterfaceInformation.push_back(neigh_info);
 
@@ -1423,7 +1423,7 @@ RoutingProtocol::SendHello ()
 	  it++)
       {
 	neigh_info.neighborInterfaceAddress = (*it);
-	neigh_info.metricInfo = m_metric->GetMetricInfo((*it));
+	neigh_info.metricInfo = m_metric->GetHelloInfo((*it));
 
 	neighInfos.push_back(neigh_info);
       }
