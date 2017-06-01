@@ -132,7 +132,6 @@ private:
     void Compute(EtxInfo * info);
     void PacketProcessing(uint16_t packetSeqNumber, EtxInfo * info);
     void Timeout(EtxInfo * info, const Time & expirationTime);
-
 };
 
 
