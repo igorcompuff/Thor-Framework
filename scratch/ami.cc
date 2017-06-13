@@ -157,7 +157,7 @@ int main (int argc, char *argv[])
   Ptr<MatrixPropagationLossModel> lossModel = CreateObject<MatrixPropagationLossModel> ();
   lossModel->SetDefaultLoss (200); // set default loss to 200 dB (no link)
   lossModel->SetLoss (olsrNodes.Get (0)->GetObject<MobilityModel>(), olsrNodes.Get (1)->GetObject<MobilityModel>(), 40); // set symmetric loss 0 <-> 1 to 50 dB
-  lossModel->SetLoss (olsrNodes.Get (0)->GetObject<MobilityModel>(), olsrNodes.Get (2)->GetObject<MobilityModel>(), 60); // set symmetric loss 2 <-> 1 to 50 dB
+  lossModel->SetLoss (olsrNodes.Get (0)->GetObject<MobilityModel>(), olsrNodes.Get (2)->GetObject<MobilityModel>(), 113); // set symmetric loss 2 <-> 1 to 50 dB
 
   // 4. Create & setup wifi channel
   Ptr<YansWifiChannel> wifiChannel = CreateObject <YansWifiChannel> ();
@@ -181,6 +181,7 @@ int main (int argc, char *argv[])
   // This is one parameter that matters when using FixedRssLossModel
   // set it to zero; otherwise, gain will be added
   wifiPhy.Set ("RxGain", DoubleValue (0) );
+  wifiPhy.Set ("RxNoiseFigure", DoubleValue (10) );
   // ns-3 supports RadioTap and Prism tracing extensions for 802.11b
   wifiPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
   wifiPhy.SetChannel (wifiChannel);

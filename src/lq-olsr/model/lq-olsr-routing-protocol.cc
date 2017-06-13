@@ -745,13 +745,22 @@ RoutingProtocol::RoutingTableComputation ()
 	  std::vector<DestinationTuple>::iterator selectedIt = m_destinations.begin() + selectedIndex;
 	  DestinationTuple selectedDest = *selectedIt;
 
-	  AddLqEntry(selectedDest.destAddress, selectedDest.accessLink->neighborIfaceAddr,
-		     selectedDest.accessLink->localIfaceAddr,
-		     m_costs[selectedDest.destAddress]);
+	  float selectedCost = m_costs[selectedDest.destAddress];
+	  int validCost = m_metric->CompareBest(selectedCost, m_metric->GetInfinityCostValue());
+	  if (selectedDest.accessLink != NULL && validCost > 0)
+	    {
+	      AddLqEntry(selectedDest.destAddress, selectedDest.accessLink->neighborIfaceAddr,
+			 selectedDest.accessLink->localIfaceAddr,
+			 m_costs[selectedDest.destAddress]);
 
-	  m_destinations.erase(selectedIt);
+	      m_destinations.erase(selectedIt);
 
-	  UpdateDestinationNeighbors(selectedDest);
+	      UpdateDestinationNeighbors(selectedDest);
+	    }
+	  else
+	    {
+	      done = true;
+	    }
 	}
       else
 	{

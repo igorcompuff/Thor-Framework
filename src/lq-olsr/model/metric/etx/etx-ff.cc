@@ -216,7 +216,7 @@ Etx::Compute(EtxInfo * info)
     }
   else
     {
-      info->metric_r_etx = sum_total / sum_penalty;
+      info->metric_r_etx = sum_penalty / sum_total;
 
       if (info->metric_d_etx == UNDEFINED_R_ETX)
 	{
@@ -241,6 +241,7 @@ Etx::Compute(EtxInfo * info)
   info->metricTotalLifo.Push(0);
 
   NS_LOG_DEBUG("Computation finished. New cost = " << info->metricValue);
+  NS_LOG_DEBUG("Rx = " << info->metric_r_etx);
 
   Time nextSched = Simulator::Now() +  etx_metric_interval;
   m_events.Track (Simulator::Schedule (DELAY (nextSched), &Etx::Compute, this, info));
