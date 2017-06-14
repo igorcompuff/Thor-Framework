@@ -146,7 +146,7 @@ int main (int argc, char *argv[])
   // used for received signal strength.
   MobilityHelper mobility;
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (40.0, -30.0, 0.0));
+  positionAlloc->Add (Vector (60.0, -30.0, 0.0));
   positionAlloc->Add (Vector (30.0, 0.0, 0.0));
   positionAlloc->Add (Vector (60.0, 0.0, 0.0));
   mobility.SetPositionAllocator (positionAlloc);
@@ -272,7 +272,6 @@ int main (int argc, char *argv[])
 
 	  if (assocMethod1)
 	  {
-		  std::cout << "TESTE\n";
 		  // Create a special Ipv4StaticRouting instance for RoutingTableAssociation
 		  // Even the Ipv4StaticRouting instance added to list may be used
 		  Ptr<Ipv4StaticRouting> hnaEntries = Create<Ipv4StaticRouting> ();
