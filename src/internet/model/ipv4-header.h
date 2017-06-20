@@ -37,6 +37,7 @@ public:
    * \brief Construct a null IPv4 header
    */
   Ipv4Header ();
+  Ipv4Header (const Ipv4Header & header);
   /**
    * \brief Enable checksum calculation for this header.
    */

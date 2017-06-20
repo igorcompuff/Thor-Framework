@@ -45,6 +45,23 @@ Ipv4Header::Ipv4Header ()
 {
 }
 
+Ipv4Header::Ipv4Header (const Ipv4Header & header)
+{
+  m_calcChecksum = header.m_calcChecksum;
+  m_payloadSize = header.m_payloadSize;
+  m_identification = header.m_identification;
+  m_tos = header.m_tos;
+  m_ttl = header.m_ttl;
+  m_protocol = header.m_protocol,
+  m_flags = header.m_flags;
+  m_fragmentOffset = header.m_fragmentOffset;
+  m_source = header.m_source;
+  m_destination = header.m_destination;
+  m_checksum = header.m_checksum;
+  m_goodChecksum = header.m_goodChecksum;
+  m_headerSize = header.m_headerSize;
+}
+
 void
 Ipv4Header::EnableChecksum (void)
 {

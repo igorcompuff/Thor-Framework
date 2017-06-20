@@ -116,7 +116,7 @@ public:
    * \returns true if the Ipv4RoutingProtocol takes responsibility for 
    *          forwarding or delivering the packet, false otherwise
    */ 
-  virtual bool RouteInput  (Ptr<const Packet> p, const Ipv4Header &header, Ptr<const NetDevice> idev, 
+  virtual bool RouteInput  (Ptr<const Packet> p, const Ipv4Header &header, Ptr<const NetDevice> idev,
                             UnicastForwardCallback ucb, MulticastForwardCallback mcb,
                             LocalDeliverCallback lcb, ErrorCallback ecb) = 0;
 

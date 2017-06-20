@@ -10,6 +10,7 @@ def build(bld):
     module = bld.create_ns3_module('ddsa', ['lq-olsr'])
     module.source = [
         'model/ddsa-routing-protocol-adapter.cc',
+        'model/ddsa-routing-protocol-dap-adapter.cc',
         'model/ipv4-l3-protocol-ddsa-adapter.cc',
         'helper/ddsa-helper.cc',
         'helper/ddsa-internet-stack-helper.cc',
@@ -24,6 +25,7 @@ def build(bld):
     headers.module = 'ddsa'
     headers.source = [
         'model/ddsa-routing-protocol-adapter.h',
+        'model/ddsa-routing-protocol-dap-adapter.h',
         'model/ipv4-l3-protocol-ddsa-adapter.h',
         'helper/ddsa-helper.h',
         'helper/ddsa-internet-stack-helper.h',

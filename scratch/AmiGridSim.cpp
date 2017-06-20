@@ -253,8 +253,8 @@ AmiGridSim::ConfigureRouting()
   internet_olsr.SetRoutingHelper (listDaps); // has effect on the next Install ()
   internet_olsr.Install (daps);
 
-  InternetStackHelper internet_csma;
-  internet_csma.Install (controllers);
+  InternetStackHelper internet_controller;
+  internet_controller.Install (controllers);
 }
 
 void
