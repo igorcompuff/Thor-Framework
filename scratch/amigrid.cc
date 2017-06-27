@@ -2,17 +2,29 @@
 #include "ns3/etx-ff.h"
 #include "ns3/lq-olsr-header.h"
 #include "ns3/ddsa-routing-protocol-adapter.h"
+#include "ns3/ddsa-routing-protocol-dap-adapter.h"
+#include "ns3/ddsa-helper.h"
 #include "ns3/internet-module.h"
 #include "ns3/wifi-module.h"
+#include "ns3/csma-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/propagation-loss-model.h"
 #include "ns3/propagation-delay-model.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/network-module.h"
+#include "ns3/applications-module.h"
 
 using namespace ns3;
 using namespace ns3::lqmetric;
 using namespace ns3::lqolsr;
+
+NS_LOG_COMPONENT_DEFINE ("amigrid");
+
+void ReceivePacket (Ptr<Socket> socket)
+{
+  NS_LOG_UNCOND ("Received one packet!");
+}
+
 /*
  * AmiGridSim.cpp
  *
@@ -31,11 +43,13 @@ class AmiGridSim
     Ptr<ListPositionAllocator> CreateDapsPosition();
     void InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<ListPositionAllocator> dapsPosition);
     NetDeviceContainer ConfigureWifi();
-    std::vector<NetDeviceContainer> CreatePointToPointConnections();
+    NetDeviceContainer CreateControllerLan();
     void ConfigureRouting();
-    void ConfigureIpAddressing(const NetDeviceContainer & olsrDevices, const std::vector<NetDeviceContainer> & pointToPointDevices);
-
-
+    void ConfigureIpAddressing(const NetDeviceContainer & olsrDevices, const NetDeviceContainer & csmaDevices);
+    void ConfigureMeterApplication(uint16_t port, Time start, Time stop);
+    void ConfigureControllerApplication(uint16_t port);
+    //static void ReceivePacket (Ptr<Socket> socket);
+    void CreateNodes();
   private:
     void Parse(int argc, char *argv[]);
 
@@ -60,6 +74,8 @@ class AmiGridSim
     int gridRows;
     Ptr<LogDistancePropagationLossModel> myLossModel;
     YansWifiPhyHelper myWifiPhy;
+    Ipv4InterfaceContainer olsrIpv4Devices;
+    Ipv4InterfaceContainer csmaIpv4Devices;
 };
 
 AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
@@ -71,11 +87,11 @@ AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
     totalDaps = 3;
     verbose = false;
     assocMethod1 = false;
-    assocMethod2 = false;
+    assocMethod2 = true;
     gridXShift = 10.0;
     gridYShift = 10.0;
-    gridColumns = 12;
-    gridRows = 3;
+    gridColumns = 3;//12;
+    gridRows = 2;//3;
     myLossModel = CreateObject<LogDistancePropagationLossModel> ();
     myWifiPhy = YansWifiPhyHelper::Default();
 }
@@ -117,12 +133,15 @@ AmiGridSim::Configure(int argc, char *argv[])
   Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue ("2200"));
   // Fix non-unicast data rate to be the same as that of unicast
   Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode", StringValue (phyMode));
+}
 
+void
+AmiGridSim::CreateNodes()
+{
   daps.Create(totalDaps); // Creates the specified number of daps
   meters.Create(gridRows * gridColumns); //Creates the Specified NUmber of meters
   controllers.Create(1); // Creates one controller.
 }
-
 Ptr<ListPositionAllocator>
 AmiGridSim::CreateMetersPosition()
 {
@@ -149,7 +168,7 @@ AmiGridSim::CreateDapsPosition()
   double columnsPerDap = gridColumns / (double)totalDaps;
   double x = ((columnsPerDap - 1) * gridXShift) / 2;
 
-  for (int dap = 0; dap < totalDaps; dap++)
+  for (uint32_t dap = 0; dap < totalDaps; dap++)
     {
       positionAlloc->Add (Vector (x, y, 0.0));
 
@@ -200,51 +219,46 @@ AmiGridSim::ConfigureWifi()
   NodeContainer allOlsrNodes;
   allOlsrNodes.Add(meters);
   allOlsrNodes.Add(daps);
-
-  return wifi.Install (myWifiPhy, wifiMac, allOlsrNodes);
-}
-
-std::vector<NetDeviceContainer>
-AmiGridSim::CreatePointToPointConnections()
-{
-  std::vector<NetDeviceContainer> devices;
-  PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
-  pointToPoint.SetChannelAttribute ("Delay", StringValue ("2ms"));
-
-  for (int i = 0; i < totalDaps; i++)
-    {
-      NodeContainer nodes;
-      nodes.Add(daps.Get (i));
-      nodes.Add(controllers.Get (0));
-
-      devices.push_back(pointToPoint.Install(nodes));
-    }
+  NetDeviceContainer devices = wifi.Install (myWifiPhy, wifiMac, allOlsrNodes);
+  myWifiPhy.EnablePcap ("olsr-hna", devices);
 
   return devices;
+}
+
+NetDeviceContainer
+AmiGridSim::CreateControllerLan()
+{
+  CsmaHelper csma;
+  csma.SetChannelAttribute ("DataRate", DataRateValue (DataRate (5000000)));
+  csma.SetChannelAttribute ("Delay", TimeValue (MilliSeconds (2)));
+  csma.SetDeviceAttribute ("Mtu", UintegerValue (1400));
+  NetDeviceContainer csmaDevices = csma.Install (NodeContainer (controllers, daps));
+  csma.EnablePcap ("csma", csmaDevices, false);
+
+  return csmaDevices;
 }
 
 void
 AmiGridSim::ConfigureRouting()
 {
   TypeId metricTid = Etx::GetTypeId();
-  LqOlsrHelper olsrHelper(metricTid);
-  DDsaHelper ddsaHelper(metricTid);
+  DDsaHelper ddsaMeterHelper(DDsaHelper::METER,metricTid);
+  DDsaHelper ddsaDapHelper(DDsaHelper::DAP,metricTid);
 
-  for (int i = 0; i < totalDaps; i++)
+  for (uint32_t i = 0; i < totalDaps; i++)
     {
-      olsrHelper.ExcludeInterface (daps.Get (i), 2);
+      ddsaDapHelper.ExcludeInterface (daps.Get (i), 2);
     }
 
   Ipv4StaticRoutingHelper staticRouting;
 
   Ipv4ListRoutingHelper listMeters;
   listMeters.Add (staticRouting, 0);
-  listMeters.Add (ddsaHelper, 10);
+  listMeters.Add (ddsaMeterHelper, 10);
 
   Ipv4ListRoutingHelper listDaps;
   listDaps.Add (staticRouting, 0);
-  listDaps.Add (olsrHelper, 10);
+  listDaps.Add (ddsaDapHelper, 10);
 
   InternetStackHelper internet_olsr;
   internet_olsr.SetRoutingHelper (listMeters); // has effect on the next Install ()
@@ -255,25 +269,115 @@ AmiGridSim::ConfigureRouting()
 
   InternetStackHelper internet_controller;
   internet_controller.Install (controllers);
+
+  for (uint32_t k = 0; k < daps.GetN() ; k++)
+    {
+  	  Ptr<Ipv4> stack = daps.Get (k)->GetObject<Ipv4> ();
+  	  Ptr<Ipv4RoutingProtocol> rp_Gw = (stack->GetRoutingProtocol ());
+  	  Ptr<Ipv4ListRouting> lrp_Gw = DynamicCast<Ipv4ListRouting> (rp_Gw);
+
+  	  Ptr<ddsa::DdsaRoutingProtocolDapAdapter> lqolsr_rp;
+
+  	  for (uint32_t i = 0; i < lrp_Gw->GetNRoutingProtocols ();  i++)
+  	  {
+  		  int16_t priority;
+  		  Ptr<Ipv4RoutingProtocol> temp = lrp_Gw->GetRoutingProtocol (i, priority);
+  		  if (DynamicCast<ddsa::DdsaRoutingProtocolDapAdapter> (temp))
+  		  {
+  		      lqolsr_rp = DynamicCast<ddsa::DdsaRoutingProtocolDapAdapter> (temp);
+  		  }
+  	  }
+
+  	  if (assocMethod1)
+  	  {
+  		  // Create a special Ipv4StaticRouting instance for RoutingTableAssociation
+  		  // Even the Ipv4StaticRouting instance added to list may be used
+  		  Ptr<Ipv4StaticRouting> hnaEntries = Create<Ipv4StaticRouting> ();
+
+  		  // Add the required routes into the Ipv4StaticRouting Protocol instance
+  		  // and have the node generate HNA messages for all these routes
+  		  // which are associated with non-OLSR interfaces specified above.
+  		  hnaEntries->AddNetworkRouteTo (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"), uint32_t (2), uint32_t (1));
+  		  lqolsr_rp->SetRoutingTableAssociation (hnaEntries);
+  	  }
+
+  	  if (assocMethod2)
+  	  {
+  		  // Specify the required associations directly.
+  	      lqolsr_rp->AddHostNetworkAssociation (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"));
+  	  }
+    }
 }
 
 void
-AmiGridSim::ConfigureIpAddressing(const NetDeviceContainer & olsrDevices, const std::vector<NetDeviceContainer> & pointToPointDevices)
+AmiGridSim::ConfigureIpAddressing(const NetDeviceContainer & olsrDevices, const NetDeviceContainer & csmaDevices)
 {
   NS_LOG_INFO ("Assign IP Addresses.");
 
   Ipv4AddressHelper ipv4;
-  ipv4.SetBase ("10.1.1.0", "255.255.255.0");
-  ipv4.Assign (olsrDevices);
+  ipv4.SetBase ("10.1.1.0", "255.255.0.0");
+  olsrIpv4Devices = ipv4.Assign (olsrDevices);
 
-  std::string ipBase = "172.16.";
-  for (int i = 0; i < pointToPointDevices.size(); i++)
-    {
-      NetDeviceContainer pointToPoint = pointToPointDevices[i];
-      std::string ip = ipBase + (i+1) + ".0";
-      ipv4.SetBase (Ipv4Address(ip), "255.255.255.0");
-      ipv4.Assign (pointToPoint);
-    }
+  ipv4.SetBase (Ipv4Address("172.16.0.0"), "255.255.255.0");
+  csmaIpv4Devices = ipv4.Assign (csmaDevices);
 }
+
+void
+AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
+{
+  OnOffHelper onOff ("ns3::UdpSocketFactory", Address (InetSocketAddress (csmaIpv4Devices.GetAddress(0), port)));
+  onOff.SetConstantRate (DataRate ("960bps"), 400);
+  ApplicationContainer apps = onOff.Install(NodeContainer(meters));
+  apps.Start (start);
+  apps.Stop (stop);
+}
+
+void
+AmiGridSim::ConfigureControllerApplication(uint16_t port)
+{
+  TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
+  InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), port);
+
+  Ptr<Socket> recvDap1 = Socket::CreateSocket (controllers.Get (0), tid);
+  recvDap1->Bind (local);
+  recvDap1->SetRecvCallback (MakeCallback (&ReceivePacket));
+}
+
+
+int main (int argc, char *argv[])
+{
+  AmiGridSim simulation;
+
+  simulation.Configure(argc, argv);
+  simulation.CreateNodes();
+
+  Ptr<ListPositionAllocator> metersPositionAlloc = simulation.CreateMetersPosition();
+  Ptr<ListPositionAllocator> dapsPositionAlloc = simulation.CreateDapsPosition();
+
+  simulation.InstallMobilityModel(metersPositionAlloc, dapsPositionAlloc);
+  NetDeviceContainer olsrDevices = simulation.ConfigureWifi();
+  NetDeviceContainer csmaDevices = simulation.CreateControllerLan();
+  simulation.ConfigureRouting();
+  simulation.ConfigureIpAddressing(olsrDevices, csmaDevices);
+
+  uint16_t port = 80;
+  Time metersStart = Seconds(1.0);
+  Time metersStop = Seconds(10.0);
+
+  simulation.ConfigureMeterApplication(port, metersStart, metersStop);
+  simulation.ConfigureControllerApplication(port);
+
+  //Log
+  //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
+  LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
+  LogComponentEnable("Etx", LOG_LEVEL_ALL);
+
+  Simulator::Stop (Seconds (100.0));
+  Simulator::Run ();
+  Simulator::Destroy ();
+
+  return 0;
+}
+
 
 

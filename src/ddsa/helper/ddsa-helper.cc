@@ -33,10 +33,24 @@ DDsaHelper::DDsaHelper ()
   m_metricFactory.SetTypeId("ns3::lqmetric::Etx");
 }
 
-DDsaHelper::DDsaHelper (const TypeId & tid)
+DDsaHelper::DDsaHelper (NodeType nodeType, const TypeId & metricTid)
+{
+  if (nodeType == NodeType::DAP)
+    {
+      m_agentFactory.SetTypeId ("ns3::ddsa::DdsaRoutingProtocolDapAdapter");
+    }
+  else
+    {
+      m_agentFactory.SetTypeId ("ns3::ddsa::DdsaRoutingProtocolAdapter");
+    }
+
+  m_metricFactory.SetTypeId(metricTid);
+}
+
+DDsaHelper::DDsaHelper (const TypeId & metricTid)
 {
   m_agentFactory.SetTypeId ("ns3::ddsa::DdsaRoutingProtocolAdapter");
-  m_metricFactory.SetTypeId(tid);
+  m_metricFactory.SetTypeId(metricTid);
 }
 
 DDsaHelper::DDsaHelper (const DDsaHelper &o) : m_agentFactory (o.m_agentFactory), m_metricFactory (o.m_metricFactory)

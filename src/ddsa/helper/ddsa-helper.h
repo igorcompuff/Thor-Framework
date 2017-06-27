@@ -40,13 +40,20 @@ namespace ns3 {
 class DDsaHelper : public Ipv4RoutingHelper
 {
 public:
+
+  enum NodeType
+    {
+      METER, DAP
+    };
   /**
    * Create an OlsrHelper that makes life easier for people who want to install
    * OLSR routing to nodes.
    */
   DDsaHelper ();
 
-  DDsaHelper (const TypeId & tid);
+  DDsaHelper (NodeType nodeType, const TypeId & metricTid);
+
+  DDsaHelper (const TypeId & metricTid);
 
   /**
    * \brief Construct an OlsrHelper from another previously initialized instance
