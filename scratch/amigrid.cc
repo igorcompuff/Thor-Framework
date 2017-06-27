@@ -175,6 +175,8 @@ AmiGridSim::CreateDapsPosition()
       x += (columnsPerDap * gridXShift);
     }
 
+  positionAlloc->Add (Vector ((x + 10) * -1, y, 0.0));
+
   return positionAlloc;
 }
 
@@ -187,7 +189,7 @@ AmiGridSim::InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<
   mobility.Install (meters);
 
   mobility.SetPositionAllocator (dapsPosition);
-  mobility.Install (daps);
+  mobility.Install (NodeContainer(daps, controllers));
 }
 
 NetDeviceContainer
@@ -315,10 +317,10 @@ AmiGridSim::ConfigureIpAddressing(const NetDeviceContainer & olsrDevices, const 
   NS_LOG_INFO ("Assign IP Addresses.");
 
   Ipv4AddressHelper ipv4;
-  ipv4.SetBase ("10.1.1.0", "255.255.0.0");
+  ipv4.SetBase ("10.1.0.0", "255.255.0.0");
   olsrIpv4Devices = ipv4.Assign (olsrDevices);
 
-  ipv4.SetBase (Ipv4Address("172.16.0.0"), "255.255.255.0");
+  ipv4.SetBase (Ipv4Address("172.16.1.0"), "255.255.255.0");
   csmaIpv4Devices = ipv4.Assign (csmaDevices);
 }
 
@@ -327,7 +329,7 @@ AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
 {
   OnOffHelper onOff ("ns3::UdpSocketFactory", Address (InetSocketAddress (csmaIpv4Devices.GetAddress(0), port)));
   onOff.SetConstantRate (DataRate ("960bps"), 400);
-  ApplicationContainer apps = onOff.Install(NodeContainer(meters));
+  ApplicationContainer apps = onOff.Install(NodeContainer(meters.Get(3)));
   apps.Start (start);
   apps.Stop (stop);
 }
@@ -362,15 +364,16 @@ int main (int argc, char *argv[])
 
   uint16_t port = 80;
   Time metersStart = Seconds(1.0);
-  Time metersStop = Seconds(10.0);
+  Time metersStop = Seconds(80.0);
 
   simulation.ConfigureMeterApplication(port, metersStart, metersStop);
   simulation.ConfigureControllerApplication(port);
 
   //Log
   //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
-  LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
-  LogComponentEnable("Etx", LOG_LEVEL_ALL);
+  //LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
+  //LogComponentEnable("Etx", LOG_LEVEL_ALL);
+  LogComponentEnable("OnOffApplication", LOG_LEVEL_FUNCTION);
 
   Simulator::Stop (Seconds (100.0));
   Simulator::Run ();

@@ -91,7 +91,7 @@ DDsaHelper::Set (std::string name, const AttributeValue &value)
 Ptr<Ipv4RoutingProtocol>
 DDsaHelper::Create (Ptr<Node> node) const
 {
-  Ptr<ddsa::DdsaRoutingProtocolAdapter> agent = m_agentFactory.Create<ddsa::DdsaRoutingProtocolAdapter> ();
+  Ptr<lqolsr::RoutingProtocol> agent = m_agentFactory.Create<lqolsr::RoutingProtocol> ();
   Ptr<lqmetric::LqAbstractMetric> metric = m_metricFactory.Create<lqmetric::LqAbstractMetric>();
   agent->SetLqMetric(metric);
 
