@@ -2,6 +2,7 @@
 
 #include "ns3/log.h"
 #include "ipv4-l3-protocol-ddsa-adapter.h"
+#include "ns3/ipv4-routing-helper.h"
 #include "ddsa-routing-protocol-adapter.h"
 
 namespace ns3 {
@@ -24,49 +25,81 @@ namespace ns3 {
 
     Ipv4L3ProtocolDdsaAdapter::Ipv4L3ProtocolDdsaAdapter()
     {
-
+      mustFail = false;
+      m_type = NodeType::METER;
     }
 
     Ipv4L3ProtocolDdsaAdapter::~Ipv4L3ProtocolDdsaAdapter(){}
 
+    void
+    Ipv4L3ProtocolDdsaAdapter::MakeFail()
+    {
+      mustFail = true;
+    }
+
+    void
+    Ipv4L3ProtocolDdsaAdapter::Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t protocol, const Address &from,
+					 const Address &to, NetDevice::PacketType packetType)
+    {
+      if (!mustFail)
+	{
+	  Ipv4L3Protocol::Receive(device, p, protocol, from, to, packetType);
+	}
+    }
 
     void
     Ipv4L3ProtocolDdsaAdapter::Send (Ptr<Packet> packet, Ipv4Address source, Ipv4Address destination, uint8_t protocol,
 				     Ptr<Ipv4Route> route)
     {
-      Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
 
-      Ptr<Ipv4RoutingProtocol> ipRoutingProt = GetRoutingProtocol();
-      Ptr<DdsaRoutingProtocolAdapter> ddsaRoutingProt;
-
-      Ptr<Ipv4Route> routeToDap;
-      Dap selectedDap;
-
-      Socket::SocketErrno sockerr;
-
-      if (ipRoutingProt == NULL)
+      if (mustFail)
 	{
 	  return;
 	}
 
-      ddsaRoutingProt = DynamicCast<DdsaRoutingProtocolAdapter> (ipRoutingProt);
-
-      if (!ddsaRoutingProt)
+      if (m_type == NodeType::METER && route && route->GetGateway () != Ipv4Address ())
 	{
-	  return;
+	  Ptr<Ipv4RoutingProtocol> ipRoutingProt = GetRoutingProtocol();
+
+	  if (ipRoutingProt == NULL)
+	    {
+	      return;
+	    }
+
+	  Ptr<DdsaRoutingProtocolAdapter> ddsaRoutingProt = Ipv4RoutingHelper::GetRouting<DdsaRoutingProtocolAdapter>(ipRoutingProt);
+
+	  if (!ddsaRoutingProt)
+	    {
+	      return;
+	    }
+
+	  int retransmissions = ddsaRoutingProt->GetNRetransmissions();
+
+	  do
+	    {
+	      Dap selectedDap = ddsaRoutingProt->SelectDap();
+
+	      if (selectedDap.address == Ipv4Address::GetBroadcast())
+	      {
+		  continue;
+	      }
+
+	      Socket::SocketErrno sockerr;
+	      Ptr<Ipv4Route> routeToDap = ddsaRoutingProt->RouteOutput(packet, selectedDap.address, 0, sockerr);
+	      Ipv4L3Protocol::Send(packet, source, selectedDap.address, protocol, routeToDap);
+	    }
+	    while(retransmissions-- > 0);
 	}
-
-      int retrans = ddsaRoutingProt->GetNRetransmissions();
-
-      while (retrans-- > 0)
+      else
 	{
-	  selectedDap = ddsaRoutingProt->SelectDap();
-
-	  routeToDap = ddsaRoutingProt->RouteOutput(packet, selectedDap.address, 0, sockerr);
-
-	  Ipv4L3Protocol::Send(packet, source, selectedDap.address, protocol, routeToDap);
-
+	  Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
 	}
+    }
+
+    void
+    Ipv4L3ProtocolDdsaAdapter::SetNodeType(NodeType nType)
+    {
+      m_type = nType;
     }
 
   }

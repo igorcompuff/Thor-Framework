@@ -27,7 +27,7 @@ namespace ns3 {
                        MakeDoubleAccessor (&DdsaRoutingProtocolAdapter::alpha),
 		       MakeDoubleChecker<double> (0))
         .AddAttribute ("Retrans", "Number of Retransmissions",
-                       IntegerValue (1),
+                       IntegerValue (0),
                        MakeIntegerAccessor(&DdsaRoutingProtocolAdapter::n_retransmissions),
                        MakeIntegerChecker<int> (0));
       return tid;
@@ -178,7 +178,7 @@ namespace ns3 {
           return;
         }
 
-      if (it->expirationTime < Simulator::Now ())
+      if (it->expirationTime <= Simulator::Now ())
         {
 	  m_gateways.erase(it);
         }
@@ -190,30 +190,37 @@ namespace ns3 {
         }
     }
 
+    bool
+    DdsaRoutingProtocolAdapter::DapExists(const Ipv4Address & dapAddress)
+    {
+      bool dapFund = false;
+      std::vector<Dap>::iterator it = m_gateways.begin();
+
+      while (!dapFund && it != m_gateways.end())
+	{
+	  dapFund = it->address == dapAddress;
+	  it++;
+	}
+
+      return dapFund;
+    }
+
     //A new HNA message is supposed to have been sent by a DAP.
     void
     DdsaRoutingProtocolAdapter::ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface)
     {
       Time now = Simulator::Now ();
+      Ipv4Address dapAddress = msg.GetOriginatorAddress();
 
-      //This code is repeated in the ProcessHna of the base class. In the future, this should be cleaned up in a refactoring process
-      const lqolsr::LinkTuple *link_tuple = m_state.FindSymLinkTuple (senderIface, now);
-      if (link_tuple == NULL)
-	{
-	  return;
-	}
-
-      Dap gw;
-      gw.address = msg.GetOriginatorAddress();
-      gw.expirationTime = now + msg.GetVTime();
-
-      std::vector<Dap>::iterator it = std::find(m_gateways.begin(), m_gateways.end(), gw);
       lqolsr::RoutingTableEntry entry1;
 
-      if (it == m_gateways.end())
+      if (!DapExists(dapAddress))
 	{
-	  if (Lookup(gw.address, entry1) != 0)
+	  if (Lookup(dapAddress, entry1))
 	    {
+	      Dap gw;
+	      gw.address = dapAddress;
+	      gw.expirationTime = now + msg.GetVTime();
 	      gw.cost = entry1.cost;
 	      m_gateways.push_back(gw);
 
@@ -223,24 +230,40 @@ namespace ns3 {
 	    }
 	}
 
+
       RoutingProtocol::ProcessHna(msg, senderIface);
+    }
+
+    void
+    DdsaRoutingProtocolAdapter::UpdateDapCosts()
+    {
+      lqolsr::RoutingTableEntry rEntry;
+
+      for (std::vector<Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+	{
+	  if (Lookup(it->address, rEntry))
+	    {
+	      it->cost = rEntry.cost;
+	    }
+	}
     }
 
     void
     DdsaRoutingProtocolAdapter::RoutingTableComputation ()
     {
       RoutingProtocol::RoutingTableComputation();
+      UpdateDapCosts();
       BuildEligibleGateways();
     }
 
     Ptr<Ipv4Route>
     DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
     {
-      Dap selectedDap = SelectDap();
-      if (selectedDap.address != Ipv4Address::GetBroadcast())
-	{
-	  header.SetDestination(selectedDap.address);
-	}
+//      Dap selectedDap = SelectDap();
+//      if (selectedDap.address != Ipv4Address::GetBroadcast())
+//	{
+//	  header.SetDestination(selectedDap.address);
+//	}
 
       return RoutingProtocol::RouteOutput(p, header, oif, sockerr);
     }
@@ -263,8 +286,8 @@ namespace ns3 {
 
     	while (processDapComputation)
     	{
-    		CalculateProbabilities();
-    		processDapComputation = ExcludeDaps();
+	  CalculateProbabilities();
+	  processDapComputation = ExcludeDaps();
     	}
     }
 

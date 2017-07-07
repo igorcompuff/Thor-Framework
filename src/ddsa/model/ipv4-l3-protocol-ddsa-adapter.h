@@ -12,6 +12,11 @@ namespace ns3 {
     {
       public:
 
+      enum NodeType
+          {
+            METER, DAP
+          };
+
 	/**
 	 * \brief Get the type ID.
 	 * \return The object TypeId.
@@ -23,6 +28,14 @@ namespace ns3 {
 
 	virtual void Send (Ptr<Packet> packet, Ipv4Address source, Ipv4Address destination, uint8_t protocol,
 			   Ptr<Ipv4Route> route);
+	virtual void Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t protocol, const Address &from,
+	                 const Address &to, NetDevice::PacketType packetType);
+	void MakeFail();
+	void SetNodeType(NodeType nType);
+
+      private:
+	bool mustFail;
+	NodeType m_type;
     };
 
   }

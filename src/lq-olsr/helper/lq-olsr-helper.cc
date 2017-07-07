@@ -39,8 +39,7 @@ LqOlsrHelper::LqOlsrHelper (const TypeId & tid)
   m_metricFactory.SetTypeId(tid);
 }
 
-LqOlsrHelper::LqOlsrHelper (const LqOlsrHelper &o)
-  : m_agentFactory (o.m_agentFactory), m_metricFactory (o.m_metricFactory)
+LqOlsrHelper::LqOlsrHelper (const LqOlsrHelper &o) : m_agentFactory (o.m_agentFactory), m_metricFactory (o.m_metricFactory)
 {
   m_interfaceExclusions = o.m_interfaceExclusions;
 }

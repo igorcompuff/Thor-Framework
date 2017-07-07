@@ -151,7 +151,7 @@ public:
    * \param to address of the destination
    * \param packetType type of the packet
    */
-  void Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t protocol, const Address &from,
+  virtual void Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t protocol, const Address &from,
                  const Address &to, NetDevice::PacketType packetType);
 
   /**

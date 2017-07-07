@@ -280,6 +280,13 @@ DdsaInternetStackHelper::InstallAll (void) const
 }
 
 void
+DdsaInternetStackHelper::SetNodeType(ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType nt)
+{
+  nodeType = nt;
+}
+
+
+void
 DdsaInternetStackHelper::CreateAndAggregateObjectFromTypeId (Ptr<Node> node, const std::string typeId)
 {
   ObjectFactory factory;
@@ -301,7 +308,7 @@ DdsaInternetStackHelper::Install (Ptr<Node> node) const
         }
 
       CreateAndAggregateObjectFromTypeId (node, "ns3::ArpL3Protocol");
-      CreateAndAggregateObjectFromTypeId (node, "ns3::Ipv4L3Protocol");
+      CreateAndAggregateObjectFromTypeId (node, "ns3::ddsa::Ipv4L3ProtocolDdsaAdapter");
       CreateAndAggregateObjectFromTypeId (node, "ns3::Icmpv4L4Protocol");
       if (m_ipv4ArpJitterEnabled == false)
         {
@@ -313,6 +320,10 @@ DdsaInternetStackHelper::Install (Ptr<Node> node) const
       Ptr<Ipv4> ipv4 = node->GetObject<Ipv4> ();
       Ptr<Ipv4RoutingProtocol> ipv4Routing = m_routing->Create (node);
       ipv4->SetRoutingProtocol (ipv4Routing);
+
+      Ptr<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter> ipv4L3 = node->GetObject<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter>();
+      NS_ASSERT (ipv4L3);
+      ipv4L3->SetNodeType(nodeType);
     }
 
   if (m_ipv6Enabled)

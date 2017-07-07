@@ -18,8 +18,8 @@
  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
 
-#ifndef INTERNET_STACK_HELPER_H
-#define INTERNET_STACK_HELPER_H
+#ifndef DDSA_INTERNET_STACK_HELPER_H
+#define DDSA_INTERNET_STACK_HELPER_H
 
 #include "ns3/node-container.h"
 #include "ns3/net-device-container.h"
@@ -34,6 +34,7 @@
 #include "ns3/ipv6-routing-helper.h"
 #include "ns3/internet-trace-helper.h"
 #include "ns3/node.h"
+#include "ns3/ipv4-l3-protocol-ddsa-adapter.h"
 
 namespace ns3 {
 
@@ -220,6 +221,8 @@ public:
    */
   void SetIpv6NsRsJitter (bool enable);
 
+  void SetNodeType(ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType nt);
+
   /**
   * Assign a fixed random variable stream number to the random variables
   * used by this model.  Return the number of streams (possibly zero) that
@@ -366,7 +369,9 @@ private:
    * \brief IPv6 IPv6 NS and RS Jitter state (enabled/disabled) ?
    */
   bool m_ipv6NsRsJitterEnabled;
+
+  ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType nodeType;
 };
 } // namespace ns3
 
-#endif /* INTERNET_STACK_HELPER_H */
+#endif /* DDSA_INTERNET_STACK_HELPER_H */

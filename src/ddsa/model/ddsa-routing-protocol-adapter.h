@@ -56,6 +56,8 @@ namespace ns3 {
 	bool ExcludeDaps();
 	void AssociationTupleTimerExpire (Ipv4Address address);
 	void BuildEligibleGateways();
+	bool DapExists(const Ipv4Address & dapAddress);
+	void UpdateDapCosts();
 
 	//std::vector<Ipv4Address> mdmsList; To be implemented multiple mdms endpoints
 

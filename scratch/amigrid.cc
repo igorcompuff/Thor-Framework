@@ -2,8 +2,9 @@
 #include "ns3/etx-ff.h"
 #include "ns3/lq-olsr-header.h"
 #include "ns3/ddsa-routing-protocol-adapter.h"
-#include "ns3/ddsa-routing-protocol-dap-adapter.h"
+#include "ns3/lq-olsr-routing-protocol.h"
 #include "ns3/ddsa-helper.h"
+#include "ns3/lq-olsr-helper.h"
 #include "ns3/internet-module.h"
 #include "ns3/wifi-module.h"
 #include "ns3/csma-module.h"
@@ -13,6 +14,13 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/network-module.h"
 #include "ns3/applications-module.h"
+#include "ns3/ddsa-internet-stack-helper.h"
+#include "ns3/ipv4-l3-protocol-ddsa-adapter.h"
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <cstddef>
+#include <numeric>
 
 using namespace ns3;
 using namespace ns3::lqmetric;
@@ -20,10 +28,7 @@ using namespace ns3::lqolsr;
 
 NS_LOG_COMPONENT_DEFINE ("amigrid");
 
-void ReceivePacket (Ptr<Socket> socket)
-{
-  NS_LOG_UNCOND ("Received one packet!");
-}
+
 
 /*
  * AmiGridSim.cpp
@@ -47,24 +52,31 @@ class AmiGridSim
     void ConfigureRouting();
     void ConfigureIpAddressing(const NetDeviceContainer & olsrDevices, const NetDeviceContainer & csmaDevices);
     void ConfigureMeterApplication(uint16_t port, Time start, Time stop);
-    void ConfigureControllerApplication(uint16_t port);
+    void ConfigureControllerSocket(uint16_t port);
+    void ConfigureDapSocket(uint16_t port);
     //static void ReceivePacket (Ptr<Socket> socket);
     void CreateNodes();
+    void PrintStatistics();
+    void SheduleFailure();
+    void ExecuteFailure(Ptr<Node> node);
+
   private:
     void Parse(int argc, char *argv[]);
-
+    void PacketSent(Ptr<const Packet>);
+    void ControllerReceivePacket (Ptr<Socket> socket);
+    void SendPacketToController(Ptr<Node> node);
+    void DapReceivePacket (Ptr<Socket> socket);
+    double CalculateDapSelection(int dapIndex);
 
     std::string phyMode;
-    double rss; // -dBm
     uint32_t packetSize; // bytes
-    uint32_t numPackets;
     uint32_t totalDaps; //Total number of Daps
-    double interval;// seconds
     bool verbose;
     bool assocMethod1;
     bool assocMethod2;
+    bool withFailure;
+    bool ddsaEnabled;
     CommandLine cmd;
-    Time interPacketInterval;
     NodeContainer daps;
     NodeContainer meters;
     NodeContainer controllers;
@@ -72,18 +84,19 @@ class AmiGridSim
     double gridYShift; // Vertical distance between two meters in the grid
     int gridColumns;
     int gridRows;
+    int packetsSent;
+    int packetsReceived;
     Ptr<LogDistancePropagationLossModel> myLossModel;
     YansWifiPhyHelper myWifiPhy;
     Ipv4InterfaceContainer olsrIpv4Devices;
     Ipv4InterfaceContainer csmaIpv4Devices;
+    EventGarbageCollector m_events;
+    std::vector<int> dapSelectionHistory;
 };
 
 AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
 {
-    rss = -80;
-    packetSize = 1000;
-    numPackets = 86;
-    interval = 1.0;
+    packetSize = 400;
     totalDaps = 3;
     verbose = false;
     assocMethod1 = false;
@@ -91,9 +104,13 @@ AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
     gridXShift = 10.0;
     gridYShift = 10.0;
     gridColumns = 3;//12;
-    gridRows = 2;//3;
+    gridRows = 1;//3;
     myLossModel = CreateObject<LogDistancePropagationLossModel> ();
     myWifiPhy = YansWifiPhyHelper::Default();
+    packetsSent = 0;
+    packetsReceived = 0;
+    withFailure = false;
+    ddsaEnabled = true;
 }
 
 AmiGridSim::~AmiGridSim ()
@@ -105,10 +122,7 @@ void
 AmiGridSim::Parse(int argc, char *argv[])
 {
   cmd.AddValue ("phyMode", "Wifi Phy mode", phyMode);
-  cmd.AddValue ("rss", "received signal strength", rss);
   cmd.AddValue ("packetSize", "size of application packet sent", packetSize);
-  cmd.AddValue ("numPackets", "number of packets generated", numPackets);
-  cmd.AddValue ("interval", "interval (seconds) between packets", interval);
   cmd.AddValue ("totalDaps", "Total number of Daps", totalDaps);
   cmd.AddValue ("gridXShift", "Horizontal distance between two meters in the grid", gridXShift);
   cmd.AddValue ("gridYShift", "Vertical distance between two meters in the grid ", gridYShift);
@@ -117,6 +131,8 @@ AmiGridSim::Parse(int argc, char *argv[])
   cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
   cmd.AddValue ("assocMethod1", "Use SetRoutingTableAssociation () method", assocMethod1);
   cmd.AddValue ("assocMethod2", "Use AddHostNetworkAssociation () method", assocMethod2);
+  cmd.AddValue ("failure", "Cause the failure of one DAP", withFailure);
+  cmd.AddValue ("ddsaenabled", "Enable ddsa", ddsaEnabled);
 
   cmd.Parse (argc, argv);
 }
@@ -125,7 +141,11 @@ void
 AmiGridSim::Configure(int argc, char *argv[])
 {
   Parse(argc, argv);
-  interPacketInterval = Seconds (interval);
+
+  for (uint32_t i = 0; i < totalDaps; i++)
+    {
+      dapSelectionHistory.push_back(0);
+    }
 
   // disable fragmentation for frames below 2200 bytes
   Config::SetDefault ("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue ("2200"));
@@ -240,12 +260,53 @@ AmiGridSim::CreateControllerLan()
   return csmaDevices;
 }
 
+//void
+//AmiGridSim::ConfigureDapStack(TypeId metricTid)
+//{
+//  LqOlsrHelper lqOlsrDapHelper = ddsaEnabled ? DDsaHelper(metricTid) : LqOlsrHelper(metricTid) ;
+//
+//  for (uint32_t i = 0; i < totalDaps; i++)
+//    {
+//      lqOlsrDapHelper.ExcludeInterface (daps.Get (i), 2);
+//    }
+//
+//  Ipv4ListRoutingHelper list = ConfigureRouting(lqOlsrDapHelper);
+//  ConfigureInternetStack(list, daps);
+//}
+//
+//Ipv4ListRoutingHelper
+//AmiGridSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
+//{
+//  Ipv4StaticRoutingHelper staticRouting;
+//  Ipv4ListRoutingHelper list;
+//  list.Add (staticRouting, 0);
+//  list.Add (ipv4Routing, 10);
+//}
+//
+//void
+//AmiGridSim::ConfigureInternetStack(const Ipv4RoutingHelper & ipv4Routing, const NodeContainer & nodes)
+//{
+//  InternetStackHelper internet;
+//  internet.SetRoutingHelper (ipv4Routing); // has effect on the next Install ()
+//  internet.Install (nodes);
+//}
+//
+//void
+//AmiGridSim::ConfigureDdsaInternetStack(const Ipv4RoutingHelper & ipv4Routing, NodeContainer nodes, ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType nodeType)
+//{
+//  DdsaInternetStackHelper ddsa_internet;
+//  ddsa_internet.SetRoutingHelper (ipv4Routing); // has effect on the next Install ()
+//  ddsa_internet.SetNodeType(nodeType);
+//  ddsa_internet.Install (nodes);
+//}
+
 void
 AmiGridSim::ConfigureRouting()
 {
   TypeId metricTid = Etx::GetTypeId();
-  DDsaHelper ddsaMeterHelper(DDsaHelper::METER,metricTid);
-  DDsaHelper ddsaDapHelper(DDsaHelper::DAP,metricTid);
+  DDsaHelper ddsaMeterHelper(metricTid);
+
+  LqOlsrHelper ddsaDapHelper(metricTid);
 
   for (uint32_t i = 0; i < totalDaps; i++)
     {
@@ -262,12 +323,15 @@ AmiGridSim::ConfigureRouting()
   listDaps.Add (staticRouting, 0);
   listDaps.Add (ddsaDapHelper, 10);
 
-  InternetStackHelper internet_olsr;
-  internet_olsr.SetRoutingHelper (listMeters); // has effect on the next Install ()
-  internet_olsr.Install (meters);
+  DdsaInternetStackHelper internet_meters;
+  internet_meters.SetRoutingHelper (listMeters); // has effect on the next Install ()
+  internet_meters.SetNodeType(ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType::METER);
+  internet_meters.Install (meters);
 
-  internet_olsr.SetRoutingHelper (listDaps); // has effect on the next Install ()
-  internet_olsr.Install (daps);
+  DdsaInternetStackHelper internet_daps;
+  internet_daps.SetRoutingHelper (listDaps); // has effect on the next Install ()
+  internet_daps.SetNodeType(ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType::DAP);
+  internet_daps.Install (daps);
 
   InternetStackHelper internet_controller;
   internet_controller.Install (controllers);
@@ -278,15 +342,15 @@ AmiGridSim::ConfigureRouting()
   	  Ptr<Ipv4RoutingProtocol> rp_Gw = (stack->GetRoutingProtocol ());
   	  Ptr<Ipv4ListRouting> lrp_Gw = DynamicCast<Ipv4ListRouting> (rp_Gw);
 
-  	  Ptr<ddsa::DdsaRoutingProtocolDapAdapter> lqolsr_rp;
+  	  Ptr<lqolsr::RoutingProtocol> lqolsr_rp;
 
   	  for (uint32_t i = 0; i < lrp_Gw->GetNRoutingProtocols ();  i++)
   	  {
   		  int16_t priority;
   		  Ptr<Ipv4RoutingProtocol> temp = lrp_Gw->GetRoutingProtocol (i, priority);
-  		  if (DynamicCast<ddsa::DdsaRoutingProtocolDapAdapter> (temp))
+  		  if (DynamicCast<lqolsr::RoutingProtocol> (temp))
   		  {
-  		      lqolsr_rp = DynamicCast<ddsa::DdsaRoutingProtocolDapAdapter> (temp);
+  		      lqolsr_rp = DynamicCast<lqolsr::RoutingProtocol> (temp);
   		  }
   	  }
 
@@ -328,21 +392,142 @@ void
 AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
 {
   OnOffHelper onOff ("ns3::UdpSocketFactory", Address (InetSocketAddress (csmaIpv4Devices.GetAddress(0), port)));
-  onOff.SetConstantRate (DataRate ("960bps"), 400);
+  onOff.SetConstantRate (DataRate ("960bps"), packetSize);
   ApplicationContainer apps = onOff.Install(NodeContainer(meters.Get(3)));
+
+  Ptr<Application> app = apps.Get(0);
+
+  OnOffApplication * appOnOff = dynamic_cast<OnOffApplication*>(&(*app));
+
+  if (appOnOff)
+    {
+      appOnOff->TraceConnectWithoutContext("Tx", MakeCallback(&AmiGridSim::PacketSent, this));
+    }
+
   apps.Start (start);
   apps.Stop (stop);
 }
 
 void
-AmiGridSim::ConfigureControllerApplication(uint16_t port)
+AmiGridSim::ConfigureControllerSocket(uint16_t port)
 {
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
   InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), port);
 
-  Ptr<Socket> recvDap1 = Socket::CreateSocket (controllers.Get (0), tid);
-  recvDap1->Bind (local);
-  recvDap1->SetRecvCallback (MakeCallback (&ReceivePacket));
+  Ptr<Socket> recvController = Socket::CreateSocket (controllers.Get (0), tid);
+  recvController->Bind (local);
+  recvController->SetRecvCallback (MakeCallback (&AmiGridSim::ControllerReceivePacket, this));
+}
+
+void
+AmiGridSim::ConfigureDapSocket(uint16_t port)
+{
+  TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
+  InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), port);
+
+  for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
+    {
+      Ptr<Socket> recvDap = Socket::CreateSocket (*it, tid);
+      recvDap->Bind (local);
+      recvDap->SetRecvCallback (MakeCallback (&AmiGridSim::DapReceivePacket, this));
+    }
+}
+
+void
+AmiGridSim::PacketSent(Ptr<const Packet> packetSent)
+{
+  NS_LOG_UNCOND ("Packet Sent!");
+  packetsSent++;
+}
+
+void
+AmiGridSim::ControllerReceivePacket (Ptr<Socket> socket)
+{
+  Ptr<Packet> packet;
+  Address from;
+  while ((packet = socket->RecvFrom (from)))
+    {
+      NS_LOG_UNCOND ("Controller: Received one packet at " << Simulator::Now().GetSeconds() << " seconds.");
+      packetsReceived++;
+    }
+}
+
+void
+AmiGridSim::SendPacketToController(Ptr<Node> node)
+{
+  TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
+  Ptr<Socket> source = Socket::CreateSocket (node, tid);
+  InetSocketAddress remote = InetSocketAddress (Ipv4Address ("172.16.1.1"), 80);
+  source->Connect (remote);
+  source->Send (Create<Packet> (packetSize));
+}
+
+void
+AmiGridSim::DapReceivePacket (Ptr<Socket> socket)
+{
+  NS_LOG_UNCOND ("Dap " << socket->GetNode()->GetId() << ": Received one packet at " << Simulator::Now().GetSeconds() << " seconds.");
+
+  Ptr<Packet> packet;
+  Address from;
+  while ((packet = socket->RecvFrom (from)))
+    {
+      ptrdiff_t index = std::find(daps.Begin(), daps.End(), socket->GetNode()) - daps.Begin();
+      dapSelectionHistory[index]++;
+
+      SendPacketToController(socket->GetNode());
+    }
+}
+
+double
+AmiGridSim::CalculateDapSelection(int dapIndex)
+{
+  int sum = std::accumulate(dapSelectionHistory.begin(), dapSelectionHistory.end(), 0);
+
+  return dapSelectionHistory[dapIndex] / (double)sum;
+}
+
+void
+AmiGridSim::PrintStatistics()
+{
+  std::ofstream statFile;
+  statFile.open ("statistics.txt");
+  statFile << "Statistics generated from the AmiGrid simulation.\n";
+  statFile << "Number of packets sent: " << packetsSent << std::endl;
+  statFile << "Number of packets received: " << packetsReceived << std::endl;
+  statFile << "Delivery rate: " << 100 * packetsReceived / (double)packetsSent << "%" << std::endl;
+
+  int loss = packetsSent - packetsReceived;
+
+  statFile << "Loss rate: " << 100 * loss / (double)packetsSent << "%" << std::endl;
+
+  for(uint32_t i = 0; i < daps.GetN(); i++)
+    {
+      statFile << "Dap " << daps.Get(i)->GetId() << " selection rate: " << CalculateDapSelection(i) << "%" << std::endl;
+    }
+
+  statFile.close();
+}
+
+void
+AmiGridSim::SheduleFailure()
+{
+  if (withFailure)
+    {
+      m_events.Track (Simulator::Schedule (Seconds (80), &AmiGridSim::ExecuteFailure, this, daps.Get(0)));
+    }
+}
+
+void
+AmiGridSim::ExecuteFailure(Ptr<Node> node)
+{
+  NS_LOG_UNCOND ("Node " << node->GetId() << " is not working(t = " << Simulator::Now().GetSeconds() << "s)");
+
+  Ptr<ddsa::Ipv4L3ProtocolDdsaAdapter> l3Prot = node->GetObject<ddsa::Ipv4L3ProtocolDdsaAdapter>();
+
+  if (l3Prot)
+    {
+      l3Prot->MakeFail();
+    }
 }
 
 
@@ -363,22 +548,25 @@ int main (int argc, char *argv[])
   simulation.ConfigureIpAddressing(olsrDevices, csmaDevices);
 
   uint16_t port = 80;
-  Time metersStart = Seconds(1.0);
-  Time metersStop = Seconds(80.0);
+  Time metersStart = Seconds(10.0);
+  Time metersStop = Seconds(190.0);
 
   simulation.ConfigureMeterApplication(port, metersStart, metersStop);
-  simulation.ConfigureControllerApplication(port);
+  simulation.ConfigureControllerSocket(port);
+  simulation.ConfigureDapSocket(port);
+  simulation.SheduleFailure();
 
   //Log
   //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
   //LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
   //LogComponentEnable("Etx", LOG_LEVEL_ALL);
-  LogComponentEnable("OnOffApplication", LOG_LEVEL_FUNCTION);
+  //LogComponentEnable("OnOffApplication", LOG_LEVEL_FUNCTION);
+  //LogComponentEnable("DdsaRoutingProtocolDapAdapter", LOG_LEVEL_DEBUG);
 
-  Simulator::Stop (Seconds (100.0));
+  Simulator::Stop (Seconds (200.0));
   Simulator::Run ();
   Simulator::Destroy ();
-
+  simulation.PrintStatistics();
   return 0;
 }
 

@@ -47,14 +47,14 @@ namespace ns3 {
 					       LocalDeliverCallback lcb,
 					       ErrorCallback ecb)
     {
-      Ipv4Header copyHeader(header);
-      if (copyHeader.GetDestination() != Ipv4Address::GetBroadcast() &&
-	  controllerAddress != Ipv4Address::GetBroadcast())
-	{
-	  copyHeader.SetDestination(controllerAddress);
-	}
+//      NS_LOG_DEBUG("RouteInput DAP");
+//      Ipv4Header copyHeader(header);
+//      if (header.GetDestination() == GetMyMainAddress())
+//	{
+//	  copyHeader.SetDestination(controllerAddress);
+//	}
 
-      return RoutingProtocol::RouteInput(p, copyHeader, idev, ucb, mcb, lcb, ecb);
+      return false;//RoutingProtocol::RouteInput(p, copyHeader, idev, ucb, mcb, lcb, ecb);
     }
 
 

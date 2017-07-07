@@ -60,7 +60,7 @@ public:
    * This method is mainly for internal use by the other helpers;
    * clients are expected to free the dynamic memory allocated by this method
    */
-  LqOlsrHelper* Copy (void) const;
+  virtual LqOlsrHelper* Copy (void) const;
 
   /**
     * \param node the node for which an exception is to be defined
@@ -68,7 +68,7 @@ public:
     *
     * This method allows the user to specify an interface on which OLSR is not to be installed on
     */
-  void ExcludeInterface (Ptr<Node> node, uint32_t interface);
+  virtual void ExcludeInterface (Ptr<Node> node, uint32_t interface);
 
   /**
    * \param node the node on which the routing protocol will run
@@ -99,16 +99,18 @@ public:
    */
   virtual int64_t AssignStreams (NodeContainer c, int64_t stream);
 
+protected:
+
+  ObjectFactory m_agentFactory; //!< Object factory
+  ObjectFactory m_metricFactory; //!< Object factory
+  std::map< Ptr<Node>, std::set<uint32_t> > m_interfaceExclusions; //!< container of interfaces excluded from OLSR operations
+
 private:
   /**
    * \brief Assignment operator declared private and not implemented to disallow
    * assignment and prevent the compiler from happily inserting its own.
    */
   LqOlsrHelper &operator = (const LqOlsrHelper &);
-  ObjectFactory m_agentFactory; //!< Object factory
-  ObjectFactory m_metricFactory; //!< Object factory
-
-  std::map< Ptr<Node>, std::set<uint32_t> > m_interfaceExclusions; //!< container of interfaces excluded from OLSR operations
 };
 
 } // namespace ns3
