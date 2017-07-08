@@ -233,6 +233,15 @@ public:
   */
   int64_t AssignStreams (NodeContainer c, int64_t stream);
 
+protected:
+
+  /**
+   * \brief create an object from its TypeId and aggregates it to the node
+   * \param node the node
+   * \param typeId the object TypeId
+   */
+  static void CreateAndAggregateObjectFromTypeId (Ptr<Node> node, const std::string typeId);
+
 private:
   /**
    * @brief Enable pcap output the indicated Ipv4 and interface pair.
@@ -292,6 +301,16 @@ private:
                                         uint32_t interface,
                                         bool explicitFilename);
 
+  virtual void InstallIpv4Protocols (Ptr<Node> node) const;
+  virtual void InstallIpv6Protocols (Ptr<Node> node) const;
+  virtual void InstallIpCommonProtocols (Ptr<Node> node) const;
+  virtual void ConfigureIpv4ArpJitter (Ptr<Node> node) const;
+  virtual void ConfigureIpv6ArpJitter (Ptr<Node> node) const;
+  virtual void InstallIpv4Routing (Ptr<Node> node) const;
+  virtual void InstallIpv6Routing (Ptr<Node> node) const;
+  virtual void InstallIpv4Stack(Ptr<Node> node) const;
+  virtual void InstallIpv6Stack(Ptr<Node> node) const;
+
   /**
    * \brief Initialize the helper to its default values
    */
@@ -311,13 +330,6 @@ private:
    * \brief IPv6 routing helper.
    */
   const Ipv6RoutingHelper *m_routingv6;
-
-  /**
-   * \brief create an object from its TypeId and aggregates it to the node
-   * \param node the node
-   * \param typeId the object TypeId
-   */
-  static void CreateAndAggregateObjectFromTypeId (Ptr<Node> node, const std::string typeId);
 
   /**
    * \brief checks if there is an hook to a Pcap wrapper

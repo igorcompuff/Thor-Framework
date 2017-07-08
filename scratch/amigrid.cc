@@ -25,6 +25,7 @@
 using namespace ns3;
 using namespace ns3::lqmetric;
 using namespace ns3::lqolsr;
+using namespace ns3::ddsa;
 
 NS_LOG_COMPONENT_DEFINE ("amigrid");
 
@@ -59,6 +60,7 @@ class AmiGridSim
     void PrintStatistics();
     void SheduleFailure();
     void ExecuteFailure(Ptr<Node> node);
+    void ConfigureNodesStack();
 
   private:
     void Parse(int argc, char *argv[]);
@@ -67,6 +69,12 @@ class AmiGridSim
     void SendPacketToController(Ptr<Node> node);
     void DapReceivePacket (Ptr<Socket> socket);
     double CalculateDapSelection(int dapIndex);
+    void ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, Ipv4L3ProtocolDdsaAdapter::NodeType nType );
+    void ConfigureDapStack(LqOlsrHelper & helper);
+    void ConfigureMeterStack(LqOlsrHelper & helper);
+    Ipv4ListRoutingHelper ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing);
+    void ConfigureControllerStack();
+    void ConfigureDapsHna();
 
     std::string phyMode;
     uint32_t packetSize; // bytes
@@ -86,6 +94,7 @@ class AmiGridSim
     int gridRows;
     int packetsSent;
     int packetsReceived;
+    int senderNodeIndex;
     Ptr<LogDistancePropagationLossModel> myLossModel;
     YansWifiPhyHelper myWifiPhy;
     Ipv4InterfaceContainer olsrIpv4Devices;
@@ -109,6 +118,7 @@ AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
     myWifiPhy = YansWifiPhyHelper::Default();
     packetsSent = 0;
     packetsReceived = 0;
+    senderNodeIndex = -1;
     withFailure = false;
     ddsaEnabled = true;
 }
@@ -133,6 +143,7 @@ AmiGridSim::Parse(int argc, char *argv[])
   cmd.AddValue ("assocMethod2", "Use AddHostNetworkAssociation () method", assocMethod2);
   cmd.AddValue ("failure", "Cause the failure of one DAP", withFailure);
   cmd.AddValue ("ddsaenabled", "Enable ddsa", ddsaEnabled);
+  cmd.AddValue ("sender", "Sender index. If negative, all meters will be configured as senders (Default).", senderNodeIndex);
 
   cmd.Parse (argc, argv);
 }
@@ -242,7 +253,7 @@ AmiGridSim::ConfigureWifi()
   allOlsrNodes.Add(meters);
   allOlsrNodes.Add(daps);
   NetDeviceContainer devices = wifi.Install (myWifiPhy, wifiMac, allOlsrNodes);
-  myWifiPhy.EnablePcap ("olsr-hna", devices);
+  myWifiPhy.EnablePcap ("olsr-hna", devices, false);
 
   return devices;
 }
@@ -260,52 +271,119 @@ AmiGridSim::CreateControllerLan()
   return csmaDevices;
 }
 
-//void
-//AmiGridSim::ConfigureDapStack(TypeId metricTid)
-//{
-//  LqOlsrHelper lqOlsrDapHelper = ddsaEnabled ? DDsaHelper(metricTid) : LqOlsrHelper(metricTid) ;
-//
-//  for (uint32_t i = 0; i < totalDaps; i++)
-//    {
-//      lqOlsrDapHelper.ExcludeInterface (daps.Get (i), 2);
-//    }
-//
-//  Ipv4ListRoutingHelper list = ConfigureRouting(lqOlsrDapHelper);
-//  ConfigureInternetStack(list, daps);
-//}
-//
-//Ipv4ListRoutingHelper
-//AmiGridSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
-//{
-//  Ipv4StaticRoutingHelper staticRouting;
-//  Ipv4ListRoutingHelper list;
-//  list.Add (staticRouting, 0);
-//  list.Add (ipv4Routing, 10);
-//}
-//
-//void
-//AmiGridSim::ConfigureInternetStack(const Ipv4RoutingHelper & ipv4Routing, const NodeContainer & nodes)
-//{
-//  InternetStackHelper internet;
-//  internet.SetRoutingHelper (ipv4Routing); // has effect on the next Install ()
-//  internet.Install (nodes);
-//}
-//
-//void
-//AmiGridSim::ConfigureDdsaInternetStack(const Ipv4RoutingHelper & ipv4Routing, NodeContainer nodes, ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType nodeType)
-//{
-//  DdsaInternetStackHelper ddsa_internet;
-//  ddsa_internet.SetRoutingHelper (ipv4Routing); // has effect on the next Install ()
-//  ddsa_internet.SetNodeType(nodeType);
-//  ddsa_internet.Install (nodes);
-//}
+void
+AmiGridSim::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, Ipv4L3ProtocolDdsaAdapter::NodeType nType )
+{
+  Ipv4ListRoutingHelper ipv4Routing = ConfigureRouting(lqOlsrDapHelper);
+  DdsaInternetStackHelper ddsa;
+  ddsa.SetRoutingHelper (ipv4Routing); // has effect on the next Install ()
+  ddsa.SetNodeType(nType);
+  ddsa.Install (nodes);
+}
+
+void
+AmiGridSim::ConfigureDapStack(LqOlsrHelper & helper)
+{
+  for (uint32_t i = 0; i < totalDaps; i++)
+    {
+      helper.ExcludeInterface (daps.Get (i), 2);
+    }
+
+  ConfigureStack(helper, daps, Ipv4L3ProtocolDdsaAdapter::NodeType::DAP);
+}
+
+void
+AmiGridSim::ConfigureMeterStack(LqOlsrHelper & helper)
+{
+  Ipv4L3ProtocolDdsaAdapter::NodeType mType = ddsaEnabled ? Ipv4L3ProtocolDdsaAdapter::NodeType::METER :
+							    Ipv4L3ProtocolDdsaAdapter::NodeType::NON_DDSA;
+  ConfigureStack(helper, meters, mType);
+}
+
+void
+AmiGridSim::ConfigureControllerStack()
+{
+  InternetStackHelper internet;
+
+  internet.Install (controllers);
+}
+
+Ipv4ListRoutingHelper
+AmiGridSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
+{
+  Ipv4StaticRoutingHelper staticRouting;
+  Ipv4ListRoutingHelper list;
+  list.Add (staticRouting, 0);
+  list.Add (ipv4Routing, 10);
+
+  return list;
+}
+
+void
+AmiGridSim::ConfigureDapsHna()
+{
+  for (uint32_t k = 0; k < daps.GetN() ; k++)
+    {
+	Ptr<Ipv4> stack = daps.Get (k)->GetObject<Ipv4> ();
+	Ptr<Ipv4RoutingProtocol> rp_Gw = (stack->GetRoutingProtocol ());
+	Ptr<Ipv4ListRouting> lrp_Gw = DynamicCast<Ipv4ListRouting> (rp_Gw);
+
+	Ptr<lqolsr::RoutingProtocol> lqolsr_rp;
+
+	for (uint32_t i = 0; i < lrp_Gw->GetNRoutingProtocols ();  i++)
+	{
+		int16_t priority;
+		Ptr<Ipv4RoutingProtocol> temp = lrp_Gw->GetRoutingProtocol (i, priority);
+		if (DynamicCast<lqolsr::RoutingProtocol> (temp))
+		{
+		    lqolsr_rp = DynamicCast<lqolsr::RoutingProtocol> (temp);
+		}
+	}
+
+	if (assocMethod1)
+	{
+		// Create a special Ipv4StaticRouting instance for RoutingTableAssociation
+		// Even the Ipv4StaticRouting instance added to list may be used
+		Ptr<Ipv4StaticRouting> hnaEntries = Create<Ipv4StaticRouting> ();
+
+		// Add the required routes into the Ipv4StaticRouting Protocol instance
+		// and have the node generate HNA messages for all these routes
+		// which are associated with non-OLSR interfaces specified above.
+		hnaEntries->AddNetworkRouteTo (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"), uint32_t (2), uint32_t (1));
+		lqolsr_rp->SetRoutingTableAssociation (hnaEntries);
+	}
+
+	if (assocMethod2)
+	{
+		// Specify the required associations directly.
+	    lqolsr_rp->AddHostNetworkAssociation (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"));
+	}
+    }
+}
+
+void
+AmiGridSim::ConfigureNodesStack()
+{
+  TypeId metricTid = Etx::GetTypeId();
+
+  LqOlsrHelper helper(metricTid);
+  ConfigureDapStack(helper);
+
+  DDsaHelper meterHelper(metricTid);
+  ConfigureMeterStack(meterHelper);
+
+  ConfigureControllerStack();
+  ConfigureDapsHna();
+}
+
 
 void
 AmiGridSim::ConfigureRouting()
 {
   TypeId metricTid = Etx::GetTypeId();
-  DDsaHelper ddsaMeterHelper(metricTid);
+  Ipv4StaticRoutingHelper staticRouting;
 
+  //Configure DAPs
   LqOlsrHelper ddsaDapHelper(metricTid);
 
   for (uint32_t i = 0; i < totalDaps; i++)
@@ -313,28 +391,33 @@ AmiGridSim::ConfigureRouting()
       ddsaDapHelper.ExcludeInterface (daps.Get (i), 2);
     }
 
-  Ipv4StaticRoutingHelper staticRouting;
-
-  Ipv4ListRoutingHelper listMeters;
-  listMeters.Add (staticRouting, 0);
-  listMeters.Add (ddsaMeterHelper, 10);
-
   Ipv4ListRoutingHelper listDaps;
   listDaps.Add (staticRouting, 0);
   listDaps.Add (ddsaDapHelper, 10);
-
-  DdsaInternetStackHelper internet_meters;
-  internet_meters.SetRoutingHelper (listMeters); // has effect on the next Install ()
-  internet_meters.SetNodeType(ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType::METER);
-  internet_meters.Install (meters);
 
   DdsaInternetStackHelper internet_daps;
   internet_daps.SetRoutingHelper (listDaps); // has effect on the next Install ()
   internet_daps.SetNodeType(ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType::DAP);
   internet_daps.Install (daps);
 
+  //Configure Meters
+
+  DDsaHelper ddsaMeterHelper(metricTid);
+  Ipv4ListRoutingHelper listMeters;
+  listMeters.Add (staticRouting, 0);
+  listMeters.Add (ddsaMeterHelper, 10);
+
+  DdsaInternetStackHelper internet_meters;
+  internet_meters.SetRoutingHelper (listMeters); // has effect on the next Install ()
+  internet_meters.SetNodeType(ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType::METER);
+  internet_meters.Install (meters);
+
+  //Configure Controller
+
   InternetStackHelper internet_controller;
   internet_controller.Install (controllers);
+
+  //Configure hna
 
   for (uint32_t k = 0; k < daps.GetN() ; k++)
     {
@@ -393,7 +476,18 @@ AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
 {
   OnOffHelper onOff ("ns3::UdpSocketFactory", Address (InetSocketAddress (csmaIpv4Devices.GetAddress(0), port)));
   onOff.SetConstantRate (DataRate ("960bps"), packetSize);
-  ApplicationContainer apps = onOff.Install(NodeContainer(meters.Get(3)));
+  NodeContainer nodes;
+
+  if (senderNodeIndex > 0 && senderNodeIndex < (int)meters.GetN())
+    {
+      nodes.Add(meters.Get(senderNodeIndex));
+    }
+  else
+    {
+      nodes.Add(meters);
+    }
+
+  ApplicationContainer apps = onOff.Install(nodes);
 
   Ptr<Application> app = apps.Get(0);
 
@@ -513,7 +607,7 @@ AmiGridSim::SheduleFailure()
 {
   if (withFailure)
     {
-      m_events.Track (Simulator::Schedule (Seconds (80), &AmiGridSim::ExecuteFailure, this, daps.Get(0)));
+      m_events.Track (Simulator::Schedule (Seconds (80), &AmiGridSim::ExecuteFailure, this, daps.Get(1)));
     }
 }
 
@@ -544,7 +638,8 @@ int main (int argc, char *argv[])
   simulation.InstallMobilityModel(metersPositionAlloc, dapsPositionAlloc);
   NetDeviceContainer olsrDevices = simulation.ConfigureWifi();
   NetDeviceContainer csmaDevices = simulation.CreateControllerLan();
-  simulation.ConfigureRouting();
+  //simulation.ConfigureRouting();
+  simulation.ConfigureNodesStack();
   simulation.ConfigureIpAddressing(olsrDevices, csmaDevices);
 
   uint16_t port = 80;

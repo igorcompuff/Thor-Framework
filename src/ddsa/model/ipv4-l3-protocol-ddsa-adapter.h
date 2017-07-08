@@ -14,7 +14,7 @@ namespace ns3 {
 
       enum NodeType
           {
-            METER, DAP
+            METER, DAP, NON_DDSA
           };
 
 	/**
