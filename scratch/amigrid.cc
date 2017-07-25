@@ -76,6 +76,8 @@ class AmiGridSim
     void ConfigureControllerStack();
     void ConfigureDapsHna();
     void DapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interfaceId);
+    double CalculateDeliveryRate();
+    double CalculateLossRate();
 
     std::string phyMode;
     uint32_t packetSize; // bytes
@@ -619,6 +621,19 @@ AmiGridSim::CalculateDapSelection(int dapIndex)
   return sum > 0 ? (dapSelectionHistory[dapIndex] / (double)sum) * 100 : 0;
 }
 
+double
+AmiGridSim::CalculateDeliveryRate()
+{
+  return 100 * packetsReceived / (double)packetsSent;
+}
+
+double
+AmiGridSim::CalculateLossRate()
+{
+  int loss = packetsSent - packetsReceived;
+  return 100 * loss / (double)packetsSent;
+}
+
 void
 AmiGridSim::PrintStatistics()
 {
@@ -642,11 +657,8 @@ AmiGridSim::PrintStatistics()
   statFile << "Statistics generated from the AmiGrid simulation.\n";
   statFile << "Number of packets sent: " << packetsSent << std::endl;
   statFile << "Number of packets received: " << packetsReceived << std::endl;
-  statFile << "Delivery rate: " << 100 * packetsReceived / (double)packetsSent << "%" << std::endl;
-
-  int loss = packetsSent - packetsReceived;
-
-  statFile << "Loss rate: " << 100 * loss / (double)packetsSent << "%" << std::endl;
+  statFile << "Delivery rate: " << CalculateDeliveryRate() << "%" << std::endl;
+  statFile << "Loss rate: " << CalculateLossRate() << "%" << std::endl;
 
   for(uint32_t i = 0; i < daps.GetN(); i++)
     {

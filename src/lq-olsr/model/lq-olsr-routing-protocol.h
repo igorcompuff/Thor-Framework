@@ -320,6 +320,14 @@ private:
    */
   void RemoveEntry (const Ipv4Address &dest);
 
+  MessageList FilterNonDuplicatedMessages(const MessageList & messages);
+
+  void ProcessNonDuplicatedMessage(const MessageHeader & messageHeader, const Ipv4Address & senderIfaceAddr, const Ipv4Address & receiverIfaceAddr);
+
+  void ProcessMessage(const MessageList & messages, const Ipv4Address & senderIfaceAddr, const Ipv4Address & receiverIfaceAddr, const InetSocketAddress & inetSourceAddr);
+
+  MessageList ExtractCorrectMessagesFromPacket(Ptr<Packet> packet, const lqolsr::PacketHeader & olsrPacketHeader);
+
   uint32_t
   GetInterfaceNumberByAddress(const Ipv4Address & intAddress);
 

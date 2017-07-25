@@ -23,7 +23,7 @@ EtxInfo::Initialize(std::vector<int>::size_type max_size)
   metricReceivedLifo.Push(0);
   metricLostHellos = 0;
   metric_d_etx = 0;
-  metric_r_etx = Etx::UNDEFINED_R_ETX;
+  metric_r_etx = Etx::UNDEFINED_VALUE;
   metricHelloInterval = Time::Min();
   metricTotalLifo.Push(0);
   metricValue = Etx::INFINITY_COST;

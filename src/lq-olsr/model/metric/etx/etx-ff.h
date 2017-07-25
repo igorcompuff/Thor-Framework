@@ -61,11 +61,6 @@ class Etx: public LqAbstractMetric
      */
     virtual float GetCost(const Ipv4Address & neighborIfaceAddress);
 
-    /*
-     * Gets the cost calculated based on the specified metricInfo
-     */
-    virtual float GetCost(uint32_t metricInfo);
-
     virtual uint32_t GetHelloInfo(const Ipv4Address & neighborIfaceAddress);
 
     /*
@@ -113,7 +108,7 @@ class Etx: public LqAbstractMetric
     //This cost is achieved when the link has a delivery probability lower than 1% in both directions
     static constexpr float INFINITY_COST = 124;
 
-    static constexpr float UNDEFINED_R_ETX = -1;
+    static constexpr float UNDEFINED_VALUE = -1;
     static const uint16_t MAX_SEQ_NUM = 65535;
 
 private:
@@ -121,17 +116,20 @@ private:
     std::map<Ipv4Address, EtxInfo> m_links_info;
     uint16_t etx_memory_length;
     Time etx_metric_interval;
-    uint16_t etx_seqno_restart_detection;
+    //uint16_t etx_seqno_restart_detection;
     float etx_hello_timeout_factor;
     float etx_perfect_metric;
     //Timer m_helloTimer;
     //Timer m_calculationTimer;
     EventGarbageCollector m_events;
+    Ipv4Address m_address;
 
     void HelloProcessing( const lqolsr::MessageHeader::LqHello &hello, const Ipv4Address &receiverIface, EtxInfo * info);
     void Compute(EtxInfo * info);
     void PacketProcessing(uint16_t packetSeqNumber, EtxInfo * info);
-    void Timeout(EtxInfo * info, const Time & expirationTime);
+    void Timeout(EtxInfo * info);
+    void LogInfo(EtxInfo * info);
+    Time CalculateHelloTime(Time HelloInterval);
 };
 
 

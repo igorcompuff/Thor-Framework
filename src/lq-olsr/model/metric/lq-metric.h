@@ -61,11 +61,6 @@ public:
      */
     virtual float GetCost(const Ipv4Address & neighborIfaceAddress) = 0;
 
-    /*
-     * Gets the cost calculated based on the specified metricInfo
-     */
-    virtual float GetCost(uint32_t metricInfo) = 0;
-
     virtual uint32_t GetHelloInfo(const Ipv4Address & neighborIfaceAddress) = 0;
 
     /*

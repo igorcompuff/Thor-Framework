@@ -9,6 +9,7 @@
 
 #include "ns3/ipv4-address.h"
 #include "ns3/nstime.h"
+#include "ns3/event-id.h"
 
 namespace ns3 {
 namespace lqmetric {
@@ -55,6 +56,7 @@ namespace lqmetric {
       Time metricHelloInterval;
       int metricLostHellos;
       float metricValue;
+      EventId timeoutEvtId;
     };
 }
 }
