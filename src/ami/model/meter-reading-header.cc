@@ -32,7 +32,12 @@ namespace ami {
 
 NS_OBJECT_ENSURE_REGISTERED (ReadingHeader);
 
-ReadingHeader::ReadingHeader (){}
+ReadingHeader::ReadingHeader ()
+{
+  m_readingType = POWER_COMSUMPTION;
+  m_sequenceNumber = 0;
+  m_readingInfo = 0;
+}
 
 ReadingHeader::~ReadingHeader (){}
 
@@ -72,13 +77,13 @@ ReadingHeader::GetPacketSequenceNumber () const
 }
 
 void
-ReadingHeader::setReadingInfo(uint32_t info)
+ReadingHeader::SetReadingInfo(uint32_t info)
 {
   m_readingInfo = info;
 }
 
 uint32_t
-ReadingHeader::getReadingInfo() const
+ReadingHeader::GetReadingInfo() const
 {
   return m_readingInfo;
 }

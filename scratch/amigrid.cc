@@ -16,6 +16,7 @@
 #include "ns3/applications-module.h"
 #include "ns3/ddsa-internet-stack-helper.h"
 #include "ns3/ipv4-l3-protocol-ddsa-adapter.h"
+#include "ns3/integer.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -82,6 +83,7 @@ class AmiGridSim
     std::string phyMode;
     uint32_t packetSize; // bytes
     uint32_t totalDaps; //Total number of Daps
+    uint16_t sequenceNumber;
     bool verbose;
     bool assocMethod1;
     bool assocMethod2;
@@ -121,6 +123,7 @@ AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
     myWifiPhy = YansWifiPhyHelper::Default();
     packetsSent = 0;
     packetsReceived = 0;
+    sequenceNumber = 0;
     senderNodeIndex = -1;
     withFailure = false;
     ddsaEnabled = true;
@@ -383,6 +386,7 @@ AmiGridSim::ConfigureNodesStack()
   ConfigureDapStack(helper);
 
   DDsaHelper meterHelper(metricTid);
+  meterHelper.Set("Retrans", IntegerValue(10));
   ConfigureMeterStack(meterHelper);
 
   ConfigureControllerStack();

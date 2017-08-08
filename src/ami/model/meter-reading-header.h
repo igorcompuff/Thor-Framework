@@ -54,31 +54,25 @@ public:
 
   ReadingHeader ();
   virtual ~ReadingHeader ();
+  static TypeId GetTypeId (void);
+  virtual TypeId GetInstanceTypeId (void) const;
 
   void SetReadingType (ReadingType type);
-
   ReadingType GetReadingType () const;
-
   void SetPacketSequenceNumber (uint16_t seqnum);
-
   uint16_t GetPacketSequenceNumber () const;
+  void SetReadingInfo(uint32_t info);
+  uint32_t GetReadingInfo() const;
 
-  void setReadingInfo(uint32_t info);
-
-  uint32_t getReadingInfo() const;
+  virtual void Print (std::ostream &os) const;
+  virtual uint32_t GetSerializedSize (void) const;
+  virtual void Serialize (Buffer::Iterator start) const;
+  virtual uint32_t Deserialize (Buffer::Iterator start);
 
 private:
   ReadingType m_readingType;
   uint16_t m_sequenceNumber;  //!< The packet sequence number.
   uint32_t m_readingInfo;
-public:
-
-  static TypeId GetTypeId (void);
-  virtual TypeId GetInstanceTypeId (void) const;
-  virtual void Print (std::ostream &os) const;
-  virtual uint32_t GetSerializedSize (void) const;
-  virtual void Serialize (Buffer::Iterator start) const;
-  virtual uint32_t Deserialize (Buffer::Iterator start);
 };
 }
 }  // namespace ami, ns3

@@ -165,8 +165,8 @@ void OnOffApplication::StartApplication () // Called at time specified by Start
       m_socket->ShutdownRecv ();
 
       m_socket->SetConnectCallback (
-        MakeCallback (&OnOffApplication::ConnectionSucceeded, this),
-        MakeCallback (&OnOffApplication::ConnectionFailed, this));
+				    MakeCallback (&OnOffApplication::ConnectionSucceeded, this),
+				    MakeCallback (&OnOffApplication::ConnectionFailed, this));
     }
   m_cbrRateFailSafe = m_cbrRate;
 
