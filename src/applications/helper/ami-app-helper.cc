@@ -45,7 +45,7 @@ AmiAppHelper::SetAttribute (std::string name, const AttributeValue &value)
 ApplicationContainer
 AmiAppHelper::Install (Ptr<Node> node) const
 {
-  return ApplicationContainer (InstallPriv (node));
+  return ApplicationContainer (DoInstall (node));
 }
 
 ApplicationContainer
@@ -54,14 +54,14 @@ AmiAppHelper::Install (NodeContainer c) const
   ApplicationContainer apps;
   for (NodeContainer::Iterator i = c.Begin (); i != c.End (); ++i)
     {
-      apps.Add (InstallPriv (*i));
+      apps.Add (DoInstall (*i));
     }
 
   return apps;
 }
 
 Ptr<Application>
-AmiAppHelper::InstallPriv (Ptr<Node> node) const
+AmiAppHelper::DoInstall (Ptr<Node> node) const
 {
   Ptr<Application> app = m_factory.Create<Application> ();
   node->AddApplication (app);

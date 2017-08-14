@@ -100,7 +100,7 @@ private:
    * \param node The node on which an AmiApplication will be installed.
    * \returns Ptr to the application installed.
    */
-  Ptr<Application> InstallPriv (Ptr<Node> node) const;
+  Ptr<Application> DoInstall (Ptr<Node> node) const;
 
   ObjectFactory m_factory; //!< Object factory.
 };

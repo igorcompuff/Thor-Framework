@@ -2,8 +2,6 @@
 #ifndef AMI_HELPER_H
 #define AMI_HELPER_H
 
-#include "ns3/ami.h"
-
 namespace ns3 {
 
 /* ... */

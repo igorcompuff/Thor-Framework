@@ -1,6 +1,6 @@
 #include "ns3/log.h"
 #include "ami-app.h"
-#include "ns3/meter-reading-header.h"
+#include "ns3/simple-header.h"
 #include "ns3/udp-socket-factory.h"
 #include "ns3/socket.h"
 #include "ns3/simulator.h"
@@ -103,7 +103,7 @@ AmiApplication::SendPacket ()
   NS_ASSERT (m_sendEvent.IsExpired ());
   Ptr<Packet> packet = Create<Packet> ();
 
-  ami::ReadingHeader header;
+  ami::AmiHeader header;
   header.SetPacketSequenceNumber(m_seqNumber++);
   header.SetReadingInfo(m_rnd->GetInteger());
 
@@ -111,6 +111,8 @@ AmiApplication::SendPacket ()
 
   m_txTrace (packet);
   m_socket->Send (packet);
+
+  Simulator::Schedule (Seconds(1), &AmiApplication::SendPacket, this);
 }
 
 int64_t
