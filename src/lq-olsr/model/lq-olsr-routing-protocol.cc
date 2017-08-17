@@ -753,7 +753,9 @@ RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple & dest)
 void
 RoutingProtocol::RoutingTableComputation ()
 {
-  NS_LOG_DEBUG (Simulator::Now ().GetSeconds () << " s: Node " << m_mainAddress);
+  NS_LOG_DEBUG ("Routing Table Computaion at time " << Simulator::Now ().GetSeconds () << " in node " << m_mainAddress);
+
+  Clear();
 
   Time now = Simulator::Now ();
 

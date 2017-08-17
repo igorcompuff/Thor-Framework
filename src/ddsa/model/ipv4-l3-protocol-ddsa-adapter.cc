@@ -19,7 +19,10 @@ namespace ns3 {
       static TypeId tid = TypeId ("ns3::ddsa::Ipv4L3ProtocolDdsaAdapter")
         .SetParent<Ipv4L3Protocol> ()
         .SetGroupName ("Ddsa")
-        .AddConstructor<Ipv4L3ProtocolDdsaAdapter> ();
+        .AddConstructor<Ipv4L3ProtocolDdsaAdapter> ()
+	.AddTraceSource ("DapSelection", "Calleds when a new dap is selected",
+	                 MakeTraceSourceAccessor (&Ipv4L3ProtocolDdsaAdapter::m_dapSelectionTrace),
+	                 "ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::SelectedTracedCallback");
       return tid;
     }
 
@@ -83,6 +86,7 @@ namespace ns3 {
 	      {
 		  continue;
 	      }
+	      m_dapSelectionTrace(selectedDap.address, packet);
 
 	      Socket::SocketErrno sockerr;
 	      Ptr<Ipv4Route> routeToDap = ddsaRoutingProt->RouteOutput(packet, selectedDap.address, 0, sockerr);
