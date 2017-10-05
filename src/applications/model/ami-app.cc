@@ -91,7 +91,7 @@ void AmiApplication::StopApplication () // Called at time specified by Stop
     }
   else
     {
-      NS_LOG_WARN ("OnOffApplication found null socket to close in StopApplication");
+      NS_LOG_WARN ("AmiApplication found null socket to close in StopApplication");
     }
 }
 
@@ -111,8 +111,8 @@ AmiApplication::SendPacket ()
 
   m_txTrace (packet);
   m_socket->Send (packet);
-
-  Simulator::Schedule (Seconds(1), &AmiApplication::SendPacket, this);
+  NS_LOG_DEBUG("(" << Simulator::Now().GetSeconds() << ") Sent packet " << header.GetPacketSequenceNumber());
+  m_sendEvent = Simulator::Schedule (Seconds(1), &AmiApplication::SendPacket, this);
 }
 
 int64_t

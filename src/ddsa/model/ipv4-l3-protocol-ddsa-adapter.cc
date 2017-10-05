@@ -4,6 +4,7 @@
 #include "ipv4-l3-protocol-ddsa-adapter.h"
 #include "ns3/ipv4-routing-helper.h"
 #include "ddsa-routing-protocol-adapter.h"
+#include "ns3/simple-header.h"
 
 namespace ns3 {
 
@@ -54,6 +55,8 @@ namespace ns3 {
     Ipv4L3ProtocolDdsaAdapter::Send (Ptr<Packet> packet, Ipv4Address source, Ipv4Address destination, uint8_t protocol,
 				     Ptr<Ipv4Route> route)
     {
+      ami::AmiHeader amiHeader;
+
 
       if (mustFail)
 	{
@@ -67,6 +70,12 @@ namespace ns3 {
 	  if (ipRoutingProt == NULL)
 	    {
 	      return;
+	    }
+
+	  if (packet->PeekHeader(amiHeader) != 0)
+	    {
+	      uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+	      NS_LOG_DEBUG(seqNumber);
 	    }
 
 	  Ptr<DdsaRoutingProtocolAdapter> ddsaRoutingProt = Ipv4RoutingHelper::GetRouting<DdsaRoutingProtocolAdapter>(ipRoutingProt);
@@ -86,7 +95,7 @@ namespace ns3 {
 	      {
 		  continue;
 	      }
-	      m_dapSelectionTrace(selectedDap.address, packet);
+	      m_dapSelectionTrace(selectedDap.address, packet->Copy());
 
 	      Socket::SocketErrno sockerr;
 	      Ptr<Ipv4Route> routeToDap = ddsaRoutingProt->RouteOutput(packet, selectedDap.address, 0, sockerr);

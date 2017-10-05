@@ -99,6 +99,7 @@ class AmiGridSim
     void SheduleFailure();
     void ExecuteFailure(Ptr<Node> node);
     void GenerateDapStatistics();
+    void GenerateControllerReceptionStatistics();
 
   private:
     void Parse(int argc, char *argv[]);
@@ -113,13 +114,13 @@ class AmiGridSim
     void ControllerReceivePacket (Ptr<Socket> socket);
     void SendPacketToController(Ptr<Packet> packet, Ptr<Node> node);
 
-    void DapReceivePacket (Ptr<Socket> socket);
+    void DdsaDapReceivedPacket (Ptr<Socket> socket);
     double CalculateDapSelection(const Ipv4Address & dapAddress);
-    void DapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interfaceId);
+    void NonDdsaDapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interfaceId);
     double CalculateDeliveryRate();
     double CalculateLossRate();
     Ipv4Address GetNodeAddress(const Ptr<NetDevice> & device, const Ptr<Node> node);
-    void DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<const Packet> packet);
+    void DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<Packet> packet);
     void UpdateDapSelectionHistory(const Ipv4Address & address, uint16_t seqNumber);
 
     std::string phyMode;
@@ -153,6 +154,9 @@ class AmiGridSim
     std::vector<uint16_t> receivedPackets;
 
     std::map<Ipv4Address, std::vector<AmiPacketInfo> > dapSelectionHistory;
+    std::map<uint16_t, uint32_t > totalPerSeqNumber;
+    uint16_t m_curr_seqNumber;
+    int ddsa_retrans;
 };
 
 AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
@@ -173,6 +177,8 @@ AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
     ddsaEnabled = true;
     totalSentApplicationPackets = 0;
     totalSentCopies = 0;
+    m_curr_seqNumber = 0;
+    ddsa_retrans = 0;
 }
 
 AmiGridSim::~AmiGridSim ()
@@ -197,6 +203,7 @@ AmiGridSim::Parse(int argc, char *argv[])
   cmd.AddValue ("failure", "Cause the failure of one DAP", withFailure);
   cmd.AddValue ("ddsaenabled", "Enable ddsa", ddsaEnabled);
   cmd.AddValue ("sender", "Sender index. If negative, all meters will be configured as senders (Default).", senderNodeIndex);
+  cmd.AddValue ("retrans", "Number of retransmissions", ddsa_retrans);
 
   cmd.Parse (argc, argv);
 }
@@ -229,7 +236,7 @@ AmiGridSim::CreateMetersPosition()
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
   for (int row = 0; row < gridRows; row++)
     {
-      int y = row * gridYShift;
+      int y = row * gridYShift + 50;
 
       for (int col = 0; col < gridColumns; col++)
 	{
@@ -345,7 +352,7 @@ AmiGridSim::ConfigureDapStack(LqOlsrHelper & helper)
 	  Ptr<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter> ipv4L3 = (*it)->GetObject<ddsa::Ipv4L3ProtocolDdsaAdapter>();
 	  NS_ASSERT (ipv4L3);
 
-	  ipv4L3->TraceConnectWithoutContext("Rx", MakeCallback(&AmiGridSim::DapReceivedPacket, this));
+	  ipv4L3->TraceConnectWithoutContext("Rx", MakeCallback(&AmiGridSim::NonDdsaDapReceivedPacket, this));
 	}
     }
 }
@@ -439,7 +446,7 @@ AmiGridSim::ConfigureNodesStack()
   ConfigureDapStack(helper);
 
   DDsaHelper meterHelper(metricTid);
-  meterHelper.Set("Retrans", IntegerValue(10));
+  meterHelper.Set("Retrans", IntegerValue(ddsa_retrans));
   ConfigureMeterStack(meterHelper);
 
   ConfigureControllerStack();
@@ -517,12 +524,12 @@ AmiGridSim::ConfigureDapSocket(uint16_t port)
     {
       Ptr<Socket> recvDap = Socket::CreateSocket (*it, tid);
       recvDap->Bind (local);
-      recvDap->SetRecvCallback (MakeCallback (&AmiGridSim::DapReceivePacket, this));
+      recvDap->SetRecvCallback (MakeCallback (&AmiGridSim::DdsaDapReceivedPacket, this));
     }
 }
 
 void
-AmiGridSim::DapReceivePacket (Ptr<Socket> socket)
+AmiGridSim::DdsaDapReceivedPacket (Ptr<Socket> socket)
 {
   Ptr<Packet> packet;
   Address from;
@@ -543,25 +550,34 @@ AmiGridSim::DapReceivePacket (Ptr<Socket> socket)
 }
 
 void
-AmiGridSim::DapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interfaceId)
+AmiGridSim::NonDdsaDapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interfaceId)
 {
   Ipv4Address address = ipv4->GetAddress(interfaceId, 0).GetLocal();
   Ipv4Mask mask = ipv4->GetAddress(interfaceId, 0).GetMask();
 
   Ipv4Header ipHeader;
-  packet->PeekHeader (ipHeader);
+  UdpHeader udp;
+  AmiHeader amiHeader;
 
-  if (ipHeader.GetDestination().IsSubnetDirectedBroadcast(mask))
+  Ptr<Packet> pktCopy = packet->Copy();
+
+  if (pktCopy->RemoveHeader(ipHeader) != 0 && ipHeader.GetDestination().IsSubnetDirectedBroadcast(mask))
     {
       return;
     }
 
-  AmiHeader amiHeader;
 
-  if (packet->PeekHeader(amiHeader) != 0)
+
+  if (pktCopy->RemoveHeader(udp) != 0)
     {
-      uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-      NS_LOG_UNCOND ("Dap " << address << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
+
+      if (pktCopy->RemoveHeader(amiHeader) != 0)
+      {
+	uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+	NS_LOG_UNCOND ("Dap " << address << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
+	UpdateDapSelectionHistory(address, seqNumber);
+	totalSentCopies++;
+      }
     }
 }
 
@@ -570,34 +586,25 @@ AmiGridSim::DapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t
 void
 AmiGridSim::UpdateDapSelectionHistory(const Ipv4Address & address, uint16_t seqNumber)
 {
-  std::vector<AmiPacketInfo> infos;
-
-  if (dapSelectionHistory.find(address) == dapSelectionHistory.end())
-    {
-      dapSelectionHistory[address] = infos;
-    }
-  else
-    {
-      infos = dapSelectionHistory[address];
-    }
-
   bool found = false;
-  std::vector<AmiPacketInfo>::iterator it = infos.begin();
-  while (it++ != infos.end() && !found)
+  std::vector<AmiPacketInfo>::iterator it = dapSelectionHistory[address].begin();
+  while (it != dapSelectionHistory[address].end() && !found)
     {
       if (it->GetSeqNumber() == seqNumber)
 	{
 	  it->IncrementReceived();
 	  found = true;
 	}
+
+      it++;
     }
 
   if (!found)
     {
       AmiPacketInfo info;
       info.SetSeqNumber(seqNumber);
-
-      infos.push_back(info);
+      info.IncrementReceived();
+      dapSelectionHistory[address].push_back(info);
     }
 }
 
@@ -607,7 +614,9 @@ AmiGridSim::ApplicationPacketSent(Ptr<const Packet> packetSent)
   AmiHeader amiHeader;
   if (packetSent->PeekHeader(amiHeader) != 0)
     {
+      NS_LOG_UNCOND ("Application packet" << amiHeader.GetPacketSequenceNumber() << " sent at" << " at " << Simulator::Now().GetSeconds() << " seconds.");
       totalSentApplicationPackets++;
+      m_curr_seqNumber = amiHeader.GetPacketSequenceNumber();
     }
   else
     {
@@ -627,11 +636,16 @@ AmiGridSim::ControllerReceivePacket (Ptr<Socket> socket)
       if (packet->PeekHeader(amiHeader) != 0)
 	{
 	  uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-	  NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds());
 
 	  if (std::find(receivedPackets.begin(), receivedPackets.end(), seqNumber) == receivedPackets.end())
 	    {
+	      NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds());
 	      receivedPackets.push_back(seqNumber);
+	      totalPerSeqNumber[seqNumber] = 1;
+	    }
+	  else
+	    {
+	      totalPerSeqNumber[seqNumber]++;
 	    }
 	}
       else
@@ -643,17 +657,23 @@ AmiGridSim::ControllerReceivePacket (Ptr<Socket> socket)
 
 
 void
-AmiGridSim::DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<const Packet> packet)
+AmiGridSim::DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<Packet> packet)
 {
-  AmiHeader amiHeader;
+  UdpHeader udp;
 
-  if (packet->PeekHeader(amiHeader) != 0)
-  {
-      uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-      NS_LOG_UNCOND ("Dap " << dapAddress << " selected for packet " << seqNumber);
-      UpdateDapSelectionHistory(dapAddress, seqNumber);
-      totalSentCopies++;
-  }
+  if (packet->RemoveHeader(udp) != 0)
+    {
+      AmiHeader amiHeader;
+
+      if (packet->RemoveHeader(amiHeader) != 0)
+      {
+	  uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+
+	  NS_LOG_UNCOND ("Dap " << dapAddress << " selected for packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
+	  UpdateDapSelectionHistory(dapAddress, seqNumber);
+	  totalSentCopies++;
+      }
+    }
 }
 
 double
@@ -684,6 +704,19 @@ AmiGridSim::CalculateDapSelection(const Ipv4Address & dapAddress)
 }
 
 void
+AmiGridSim::GenerateControllerReceptionStatistics()
+{
+  std::ofstream statFile;
+  statFile.open("controller.txt");
+  for(std::map<uint16_t, uint32_t>::iterator it = totalPerSeqNumber.begin();
+      it != totalPerSeqNumber.end(); it++)
+    {
+      statFile << "Seq " << it->first << ": " << it->second << "\n";
+    }
+  statFile.close();
+}
+
+void
 AmiGridSim::GenerateDapStatistics()
 {
   std::ofstream statFile;
@@ -692,6 +725,7 @@ AmiGridSim::GenerateDapStatistics()
       it != dapSelectionHistory.end(); it++)
     {
       std::ostringstream stream;
+      int totalCopies = 0;
 
       stream << "dap(";
       it->first.Print(stream);
@@ -701,12 +735,15 @@ AmiGridSim::GenerateDapStatistics()
 
       statFile.open(fileName);
 
-      statFile << "Dap " << it->first << " ( selection rate = " << CalculateDapSelection(it->first) << "\n\n";
+      statFile << "Dap " << it->first << " ( selection rate = " << CalculateDapSelection(it->first) << " )\n\n";
 
       for (std::vector<AmiPacketInfo>::iterator it2 = it->second.begin(); it2 != it->second.end(); it2++)
 	{
 	  statFile << "seq " << it2->GetSeqNumber() << " ( " << it2->GetNReceived() << " )\n";
+	  totalCopies += it2->GetNReceived();
 	}
+
+      statFile << "Total copies: " << totalCopies << "\n";
 
       statFile.close();
     }
@@ -723,6 +760,10 @@ AmiGridSim::GenerateGeneralStatistics()
     {
       fileName += "_ddsa";
     }
+  else
+    {
+      fileName += "_nonddsa";
+    }
 
   if (withFailure)
     {
@@ -734,7 +775,7 @@ AmiGridSim::GenerateGeneralStatistics()
   statFile.open (fileName);
   statFile << "Statistics generated from the AmiGrid simulation.\n";
   statFile << "Number of application packets sent: " << totalSentApplicationPackets << std::endl;
-  statFile << "Number of total copies sent: " << totalSentCopies << std::endl;
+  statFile << "Number of total copies sent: " << (ddsaEnabled ? totalSentCopies : totalSentApplicationPackets) << std::endl;
   statFile << "Number of packets received: " << receivedPackets.size() << std::endl;
   statFile << "Delivery rate: " << CalculateDeliveryRate() << "%" << std::endl;
   statFile << "Loss rate: " << CalculateLossRate() << "%" << std::endl;
@@ -749,20 +790,19 @@ AmiGridSim::SheduleFailure()
 {
   if (withFailure)
     {
-      m_events.Track (Simulator::Schedule (Seconds (80), &AmiGridSim::ExecuteFailure, this, daps.Get(1)));
+      m_events.Track (Simulator::Schedule (Seconds (70), &AmiGridSim::ExecuteFailure, this, daps.Get(0)));
     }
 }
 
 void
 AmiGridSim::ExecuteFailure(Ptr<Node> node)
 {
-  NS_LOG_UNCOND ("Node " << node->GetId() << " is not working(t = " << Simulator::Now().GetSeconds() << "s)");
-
   Ptr<ddsa::Ipv4L3ProtocolDdsaAdapter> l3Prot = node->GetObject<ddsa::Ipv4L3ProtocolDdsaAdapter>();
 
   if (l3Prot)
     {
       l3Prot->MakeFail();
+      NS_LOG_UNCOND ("Node " << node->GetId() << " is not working(t = " << Simulator::Now().GetSeconds() << "s)");
     }
 }
 
@@ -802,10 +842,10 @@ int main (int argc, char *argv[])
   simulation.SheduleFailure();
 
   //Log
-  //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
+  //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_ALL);
   //LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
   //LogComponentEnable("Etx", LOG_LEVEL_ALL);
-  //LogComponentEnable("OnOffApplication", LOG_LEVEL_FUNCTION);
+  //LogComponentEnable("YansWifiPhy", LOG_LEVEL_DEBUG);
   //LogComponentEnable("DdsaRoutingProtocolDapAdapter", LOG_LEVEL_DEBUG);
 
   Simulator::Stop (Seconds (200.0));
@@ -813,6 +853,7 @@ int main (int argc, char *argv[])
   Simulator::Destroy ();
   simulation.GenerateDapStatistics();
   simulation.GenerateGeneralStatistics();
+  simulation.GenerateControllerReceptionStatistics();
   return 0;
 }
 

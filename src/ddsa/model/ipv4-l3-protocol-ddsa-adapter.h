@@ -34,12 +34,12 @@ namespace ns3 {
 	void SetNodeType(NodeType nType);
 
 	typedef void (* SelectedTracedCallback)
-	    (const Ipv4Header & header, Ptr<const Packet> packet);
+	    (const Ipv4Header & header, Ptr<Packet> packet);
 
       private:
 	bool mustFail;
 	NodeType m_type;
-	TracedCallback<const Ipv4Address &, Ptr<const Packet> > m_dapSelectionTrace;
+	TracedCallback<const Ipv4Address &, Ptr<Packet> > m_dapSelectionTrace;
     };
 
   }

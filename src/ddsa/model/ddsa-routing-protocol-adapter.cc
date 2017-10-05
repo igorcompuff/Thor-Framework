@@ -48,20 +48,20 @@ namespace ns3 {
     {
       double costSomatory = 0.0;
 
-      for(std::vector<Dap>::const_iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
-      	{
-      	  if (!it->excluded)
-      	    {
-      	      if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_HIGHER)
-      		{
-      		  costSomatory += it->cost;
-      		}
-      	      else if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_LOWER)
-      		{
-      		  costSomatory += (1 / it->cost);
-      		}
-      	    }
-      	}
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+	{
+	  if (!it->second.excluded)
+	    {
+	      if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_HIGHER)
+		{
+		  costSomatory += it->second.cost;
+		}
+	      else if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_LOWER)
+		{
+		  costSomatory += (1 / it->second.cost);
+		}
+	    }
+	}
 
       return costSomatory;
     }
@@ -71,23 +71,23 @@ namespace ns3 {
     {
       double costSomatory = SumUpNotExcludedDapCosts();
 
-      for(std::vector<Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
-	{
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+      	{
 	  //We only account for non-excluded Daps
-	  if (!it->excluded)
+	  if (!it->second.excluded)
 	    {
 	      if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_HIGHER)
 		{
 		  //If the cost is the highest possible, the probability is set to the highest value (p = 1) as well
-		  it->probability = it->cost == m_metric->GetInfinityCostValue() ? 1 : it->cost / costSomatory;
+		  it->second.probability = it->second.cost == m_metric->GetInfinityCostValue() ? 1 : it->second.cost / costSomatory;
 		}
 	      else if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_LOWER)
 		{
 		  //If the cost is the lowest possible, the probability is set to the highest value (p = 1)
-		  it->probability = it->cost == 0 ? 0 : 1 / (it->cost * costSomatory);
+		  it->second.probability = it->second.cost == 0 ? 0 : 1 / (it->second.cost * costSomatory);
 		}
 	    }
-	}
+      	}
     }
 
     bool
@@ -102,28 +102,28 @@ namespace ns3 {
     		return false;
     	}
 
-    	for(std::vector<Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); ++it)
-    	{
-	  if (it->probability > highestProb)
+    	for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
 	  {
-		  highestProb = it->probability;
+    	    if (it->second.probability > highestProb)
+	      {
+		highestProb = it->second.probability;
+	      }
 	  }
-    	}
 
     	lambda = alpha * highestProb;
 
-    	for(std::vector<Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); ++it)
-    	{
-	  if (it->probability < lambda)
-	  {
-	      it->excluded = true;
-	      excluded = true;
-	  }
-	  else
-	    {
-	      it->excluded = false;
-	    }
-    	}
+    	for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+    	  {
+	    if (it->second.probability < lambda)
+	      {
+		it->second.excluded = true;
+		excluded = true;
+	      }
+	    else
+	      {
+		it->second.excluded = false;
+	      }
+    	  }
 
     	return excluded;
     }
@@ -137,20 +137,22 @@ namespace ns3 {
       selectedDap.address = Ipv4Address::GetBroadcast();
       bool dapFound = false;
 
-      std::vector<Dap>::iterator it = m_gateways.begin();
+      std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin();
+      //std::vector<Dap>::iterator it = m_gateways.begin();
 
       while (it != m_gateways.end() && !dapFound)
-	{
-	  prob_sum += it->probability;
+      	{
 
-	  if (!it->excluded && prob_sum >= rand)
-	    {
-	      selectedDap = *it;
-	      dapFound = true;
-	    }
+	  prob_sum += it->second.probability;
 
-	  it++;
-	}
+      	  if (!it->second.excluded && prob_sum >= rand)
+      	    {
+      	      selectedDap = it->second;
+      	      dapFound = true;
+      	    }
+
+      	  it++;
+      	}
 
       Ipv4Address m_address = GetMyMainAddress();
       if (selectedDap.address != Ipv4Address::GetBroadcast())
@@ -169,40 +171,29 @@ namespace ns3 {
     void
     DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire (Ipv4Address address)
     {
-      Dap gw;
-      gw.address = address;
-      std::vector<Dap>::iterator it = std::find(m_gateways.begin(), m_gateways.end(), gw);
+      std::map<Ipv4Address, Dap>::iterator it = m_gateways.find(address);
 
       if (it == m_gateways.end())
         {
           return;
         }
 
-      if (it->expirationTime <= Simulator::Now ())
+      if (it->second.expirationTime <= Simulator::Now ())
         {
 	  m_gateways.erase(it);
         }
       else
         {
-          m_events.Track (Simulator::Schedule (DELAY (it->expirationTime),
+          m_events.Track (Simulator::Schedule (DELAY (it->second.expirationTime),
                                                &DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire,
-                                               this, it->address));
+                                               this, it->first));
         }
     }
 
     bool
     DdsaRoutingProtocolAdapter::DapExists(const Ipv4Address & dapAddress)
     {
-      bool dapFund = false;
-      std::vector<Dap>::iterator it = m_gateways.begin();
-
-      while (!dapFund && it != m_gateways.end())
-	{
-	  dapFund = it->address == dapAddress;
-	  it++;
-	}
-
-      return dapFund;
+      return m_gateways.find(dapAddress) != m_gateways.end();
     }
 
     //A new HNA message is supposed to have been sent by a DAP.
@@ -211,25 +202,32 @@ namespace ns3 {
     {
       Time now = Simulator::Now ();
       Ipv4Address dapAddress = msg.GetOriginatorAddress();
-
       lqolsr::RoutingTableEntry entry1;
 
-      if (!DapExists(dapAddress))
+      std::map<Ipv4Address, Dap>::iterator it = m_gateways.find(dapAddress);
+
+      if (Lookup(dapAddress, entry1))
 	{
-	  if (Lookup(dapAddress, entry1))
+	  if (it == m_gateways.end())
 	    {
 	      Dap gw;
 	      gw.address = dapAddress;
 	      gw.expirationTime = now + msg.GetVTime();
 	      gw.cost = entry1.cost;
-	      m_gateways.push_back(gw);
+	      m_gateways[dapAddress] = gw;
 
-	      Simulator::Schedule (DELAY (gw.expirationTime), &DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire, this, gw.address);
-
-	      BuildEligibleGateways();
+	      NS_LOG_DEBUG("DAP " << dapAddress << " is now a possible gateway");
+	    }
+	  else
+	    {
+	      it->second.expirationTime = now + msg.GetVTime();
+	      NS_LOG_DEBUG("Expiration Time for Gateway " << dapAddress << " updated");
 	    }
 	}
-
+      else
+	{
+	  NS_LOG_DEBUG("DAP " << dapAddress << " cannot be a gateway (no route found)");
+	}
 
       RoutingProtocol::ProcessHna(msg, senderIface);
     }
@@ -239,11 +237,11 @@ namespace ns3 {
     {
       lqolsr::RoutingTableEntry rEntry;
 
-      for (std::vector<Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
 	{
-	  if (Lookup(it->address, rEntry))
+	  if (Lookup(it->first, rEntry))
 	    {
-	      it->cost = rEntry.cost;
+	      it->second.cost = rEntry.cost;
 	    }
 	}
     }
@@ -259,12 +257,7 @@ namespace ns3 {
     Ptr<Ipv4Route>
     DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
     {
-//      Dap selectedDap = SelectDap();
-//      if (selectedDap.address != Ipv4Address::GetBroadcast())
-//	{
-//	  header.SetDestination(selectedDap.address);
-//	}
-
+      //This method can be removed later
       return RoutingProtocol::RouteOutput(p, header, oif, sockerr);
     }
 
@@ -302,7 +295,6 @@ namespace ns3 {
     {
       return n_retransmissions;
     }
-
   }
 }
 

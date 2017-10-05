@@ -61,7 +61,8 @@ namespace ns3 {
 
 	//std::vector<Ipv4Address> mdmsList; To be implemented multiple mdms endpoints
 
-	std::vector<Dap> m_gateways;
+	std::map<Ipv4Address, Dap> m_gateways;
+	//std::vector<Dap> m_gateways;
 	double alpha;
 	Ptr<UniformRandomVariable> m_rnd;
 	int n_retransmissions;
