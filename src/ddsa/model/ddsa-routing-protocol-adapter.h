@@ -42,6 +42,7 @@ namespace ns3 {
 	Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Address dstAddr, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
 	int GetNRetransmissions();
 	Dap SelectDap();
+	int GetTotalCurrentEligibleDaps();
 
       protected:
 
@@ -59,10 +60,7 @@ namespace ns3 {
 	bool DapExists(const Ipv4Address & dapAddress);
 	void UpdateDapCosts();
 
-	//std::vector<Ipv4Address> mdmsList; To be implemented multiple mdms endpoints
-
 	std::map<Ipv4Address, Dap> m_gateways;
-	//std::vector<Dap> m_gateways;
 	double alpha;
 	Ptr<UniformRandomVariable> m_rnd;
 	int n_retransmissions;

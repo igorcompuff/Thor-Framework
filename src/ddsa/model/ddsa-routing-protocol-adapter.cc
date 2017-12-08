@@ -138,7 +138,6 @@ namespace ns3 {
       bool dapFound = false;
 
       std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin();
-      //std::vector<Dap>::iterator it = m_gateways.begin();
 
       while (it != m_gateways.end() && !dapFound)
       	{
@@ -166,6 +165,21 @@ namespace ns3 {
 
 
       return selectedDap;
+    }
+
+    int
+    DdsaRoutingProtocolAdapter::GetTotalCurrentEligibleDaps()
+    {
+      int count = 0;
+      for(std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+	{
+	  if (!it->second.excluded)
+	    {
+	      count++;
+	    }
+	}
+
+      return count;
     }
 
     void

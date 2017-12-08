@@ -84,7 +84,10 @@ class AmiGridSim
     void Configure(int argc, char *argv[]);
     Ptr<ListPositionAllocator> CreateMetersPosition();
     Ptr<ListPositionAllocator> CreateDapsPosition();
-    void InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<ListPositionAllocator> dapsPosition);
+    std::vector<Vector> GetDapPositions();
+    Ptr<ListPositionAllocator> CreateDapsPosition(std::vector<Vector> positions);
+    Ptr<ListPositionAllocator> CreateControllerPosition();
+    void InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<ListPositionAllocator> dapsPosition, Ptr<ListPositionAllocator> controllerPosition);
     void ConfigureWifi();
     void CreateControllerLan();
     void ConfigureIpAddressing();
@@ -100,6 +103,10 @@ class AmiGridSim
     void ExecuteFailure(Ptr<Node> node);
     void GenerateDapStatistics();
     void GenerateControllerReceptionStatistics();
+    int GetRedundancy()
+    {
+      return redundancy;
+    }
 
   private:
     void Parse(int argc, char *argv[]);
@@ -122,6 +129,8 @@ class AmiGridSim
     Ipv4Address GetNodeAddress(const Ptr<NetDevice> & device, const Ptr<Node> node);
     void DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<Packet> packet);
     void UpdateDapSelectionHistory(const Ipv4Address & address, uint16_t seqNumber);
+    double GetCoordinate(std::stringstream * coordStream);
+    Vector GetVector(std::string xStr, std::string yStr);
 
     std::string phyMode;
     uint32_t packetSize; // bytes
@@ -157,6 +166,7 @@ class AmiGridSim
     std::map<uint16_t, uint32_t > totalPerSeqNumber;
     uint16_t m_curr_seqNumber;
     int ddsa_retrans;
+    int redundancy;
 };
 
 AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
@@ -179,6 +189,7 @@ AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
     totalSentCopies = 0;
     m_curr_seqNumber = 0;
     ddsa_retrans = 0;
+    redundancy = 0;
 }
 
 AmiGridSim::~AmiGridSim ()
@@ -192,7 +203,7 @@ AmiGridSim::Parse(int argc, char *argv[])
 {
   cmd.AddValue ("phyMode", "Wifi Phy mode", phyMode);
   cmd.AddValue ("packetSize", "size of application packet sent", packetSize);
-  cmd.AddValue ("totalDaps", "Total number of Daps", totalDaps);
+  cmd.AddValue ("daps", "Total number of Daps", totalDaps);
   cmd.AddValue ("gridXShift", "Horizontal distance between two meters in the grid", gridXShift);
   cmd.AddValue ("gridYShift", "Vertical distance between two meters in the grid ", gridYShift);
   cmd.AddValue ("gridColumns", "Number of columns in the grid ", gridColumns);
@@ -204,6 +215,7 @@ AmiGridSim::Parse(int argc, char *argv[])
   cmd.AddValue ("ddsaenabled", "Enable ddsa", ddsaEnabled);
   cmd.AddValue ("sender", "Sender index. If negative, all meters will be configured as senders (Default).", senderNodeIndex);
   cmd.AddValue ("retrans", "Number of retransmissions", ddsa_retrans);
+  cmd.AddValue ("redundancy", "Number of retransmissions", redundancy);
 
   cmd.Parse (argc, argv);
 }
@@ -247,6 +259,129 @@ AmiGridSim::CreateMetersPosition()
   return positionAlloc;
 }
 
+double
+AmiGridSim::GetCoordinate(std::stringstream * coordStream)
+{
+  std::string token;
+  std::getline(*coordStream, token, '=');
+  std::getline(*coordStream, token, '=');
+
+  return std::atof(token.substr(1).c_str());
+}
+
+Vector
+AmiGridSim::GetVector(std::string xStr, std::string yStr)
+{
+  std::stringstream xStream(xStr);
+  std::stringstream yStream(yStr);
+
+  double x = GetCoordinate(&xStream);
+  double y = GetCoordinate(&yStream);
+
+  return Vector(x, y, 0.0);
+
+
+}
+
+std::vector<Vector>
+AmiGridSim::GetDapPositions()
+{
+  std::vector<Vector> positions;
+  std::ifstream file;
+  std::string dap, x, y, space;
+
+  std::stringstream stream;
+  stream << "/home/igor/github/ns-3.26/positions/dap_pos_" << redundancy << ".txt";
+  std::string filePath= stream.str();
+  file.open(filePath.c_str(), std::ios::in);
+
+  getline(file, dap);
+
+  while(dap.find("#") == std::string::npos)
+    {
+      getline(file, x);
+      getline(file, y);
+      getline(file, space);
+      positions.push_back(GetVector(x, y));
+      getline(file, dap);
+    }
+
+  return positions;
+}
+
+/*std::vector<Vector>
+AmiGridSim::GetDapPositions()
+{
+  std::vector<Vector> positions;
+
+  switch(redundancy)
+  {
+    case 1:
+      {
+	positions.push_back(Vector (189.879, 60.4146, 0.0));
+	break;
+      }
+    case 2:
+      {
+	positions.push_back(Vector (17.6943, 57.3105, 0.0));
+	positions.push_back(Vector (40.9112, 175.325, 0.0));
+	break;
+      }
+    case 3:
+      {
+	positions.push_back(Vector (92.6959, 171.895, 0.0));
+	positions.push_back(Vector (156.231, 12.1541, 0.0));
+	positions.push_back(Vector (114.609, 51.1925, 0.0));
+	break;
+      }
+    case 4:
+      {
+	positions.push_back(Vector (61.8184, 36.9668, 0.0));
+	positions.push_back(Vector (82.8908, 2.41091, 0.0));
+	positions.push_back(Vector (4.54448, 15.7953, 0.0));
+	positions.push_back(Vector (106.723, 74.4306, 0.0));
+	break;
+      }
+    case 5:
+      {
+	positions.push_back(Vector (127.581, 76.2543, 0.0));
+	positions.push_back(Vector (115.459, 190.425, 0.0));
+	positions.push_back(Vector (22.1452, 119.938, 0.0));
+	positions.push_back(Vector (116.172, 152.32, 0.0));
+	positions.push_back(Vector (50.5844, 158.937, 0.0));
+	break;
+      }
+    case 6:
+      {
+	positions.push_back(Vector (134.738, 79.0345, 0.0));
+	positions.push_back(Vector (88.6921, 48.5819, 0.0));
+	positions.push_back(Vector (16.1989, 8.21456, 0.0));
+	positions.push_back(Vector (142.391, 46.6189, 0.0));
+	positions.push_back(Vector (46.6189, 87.0774, 0.0));
+	positions.push_back(Vector (93.5084, 109.651, 0.0));
+	break;
+      }
+  }
+
+  return positions;
+}*/
+
+Ptr<ListPositionAllocator>
+AmiGridSim::CreateDapsPosition(std::vector<Vector> positions)
+{
+  Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
+
+  for(std::vector<Vector>::iterator pos = positions.begin(); pos != positions.end(); pos++)
+    {
+      positionAlloc->Add(*pos);
+    }
+
+  totalDaps = positions.size();
+
+  return positionAlloc;
+}
+
+
 Ptr<ListPositionAllocator>
 AmiGridSim::CreateDapsPosition()
 {
@@ -268,16 +403,29 @@ AmiGridSim::CreateDapsPosition()
   return positionAlloc;
 }
 
+Ptr<ListPositionAllocator>
+AmiGridSim::CreateControllerPosition()
+{
+  Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
+  positionAlloc->Add (Vector (0, -30, 0.0));
+
+  return positionAlloc;
+}
+
 void
-AmiGridSim::InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<ListPositionAllocator> dapsPosition)
+AmiGridSim::InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<ListPositionAllocator> dapsPosition, Ptr<ListPositionAllocator> controllerPosition)
 {
   MobilityHelper mobility;
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
+
   mobility.SetPositionAllocator (metersPosition);
   mobility.Install (meters);
 
   mobility.SetPositionAllocator (dapsPosition);
-  mobility.Install (NodeContainer(daps, controllers));
+  mobility.Install (daps);
+
+  mobility.SetPositionAllocator (controllerPosition);
+  mobility.Install (controllers);
 }
 
 void
@@ -478,7 +626,9 @@ AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
 
   if (senderNodeIndex > 0 && senderNodeIndex < (int)meters.GetN())
     {
-      nodes.Add(meters.Get(senderNodeIndex));
+      Ptr<Node> sender = meters.Get(senderNodeIndex);
+      NS_LOG_UNCOND("Node " << sender->GetId() << " configured as the sender");
+      nodes.Add(sender);
     }
   else
     {
@@ -821,12 +971,24 @@ int main (int argc, char *argv[])
   AmiGridSim simulation;
 
   simulation.Configure(argc, argv);
-  simulation.CreateNodes();
 
   Ptr<ListPositionAllocator> metersPositionAlloc = simulation.CreateMetersPosition();
-  Ptr<ListPositionAllocator> dapsPositionAlloc = simulation.CreateDapsPosition();
+  Ptr<ListPositionAllocator> dapsPositionAlloc;
 
-  simulation.InstallMobilityModel(metersPositionAlloc, dapsPositionAlloc);
+  if (simulation.GetRedundancy() > 0)
+    {
+      dapsPositionAlloc = simulation.CreateDapsPosition(simulation.GetDapPositions());
+    }
+  else
+    {
+      dapsPositionAlloc = simulation.CreateDapsPosition();
+    }
+
+  Ptr<ListPositionAllocator> controllerPositionAlloc = simulation.CreateControllerPosition();
+
+  simulation.CreateNodes();
+
+  simulation.InstallMobilityModel(metersPositionAlloc, dapsPositionAlloc, controllerPositionAlloc);
   simulation.ConfigureWifi();
   simulation.CreateControllerLan();
   simulation.ConfigureNodesStack();
