@@ -49,6 +49,10 @@ namespace ns3 {
 	{
 	  Ipv4L3Protocol::Receive(device, p, protocol, from, to, packetType);
 	}
+      else
+	{
+	  NS_LOG_DEBUG("Receiveing: Node is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
+	}
     }
 
     void
@@ -60,6 +64,7 @@ namespace ns3 {
 
       if (mustFail)
 	{
+	  NS_LOG_DEBUG("Sending: Node is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
 	  return;
 	}
 
@@ -70,12 +75,6 @@ namespace ns3 {
 	  if (ipRoutingProt == NULL)
 	    {
 	      return;
-	    }
-
-	  if (packet->PeekHeader(amiHeader) != 0)
-	    {
-	      uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-	      NS_LOG_DEBUG(seqNumber);
 	    }
 
 	  Ptr<DdsaRoutingProtocolAdapter> ddsaRoutingProt = Ipv4RoutingHelper::GetRouting<DdsaRoutingProtocolAdapter>(ipRoutingProt);

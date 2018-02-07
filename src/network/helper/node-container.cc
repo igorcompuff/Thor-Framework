@@ -89,6 +89,26 @@ NodeContainer::Get (uint32_t i) const
 {
   return m_nodes[i];
 }
+
+Ptr<Node>
+NodeContainer::FindById (uint32_t id) const
+{
+  uint32_t i = 0;
+  Ptr<Node> node = NULL;
+
+  while(i < GetN() && !node)
+    {
+      if (Get(i)->GetId() == id)
+	{
+	  node = Get(i);
+	}
+      i++;
+    }
+
+  return node;
+}
+
+
 void 
 NodeContainer::Create (uint32_t n)
 {

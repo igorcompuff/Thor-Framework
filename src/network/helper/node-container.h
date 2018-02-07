@@ -226,6 +226,11 @@ public:
   Ptr<Node> Get (uint32_t i) const;
 
   /**
+   * \brief Get the Ptr<Node> stored in this container that has the specified id.
+   */
+  Ptr<Node> FindById (uint32_t id) const;
+
+  /**
    * \brief Create n nodes and append pointers to them to the end of this 
    * NodeContainer.
    *

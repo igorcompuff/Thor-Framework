@@ -2,6 +2,7 @@
 
 #include "ns3/log.h"
 #include "ns3/double.h"
+#include "ns3/boolean.h"
 #include "ns3/integer.h"
 #include "ns3/lq-olsr-repositories.h"
 #include <algorithm>
@@ -29,7 +30,14 @@ namespace ns3 {
         .AddAttribute ("Retrans", "Number of Retransmissions",
                        IntegerValue (0),
                        MakeIntegerAccessor(&DdsaRoutingProtocolAdapter::n_retransmissions),
-                       MakeIntegerChecker<int> (0));
+                       MakeIntegerChecker<int> (0))
+	.AddAttribute ("Dumb", "Dumb mode",
+		       BooleanValue(false),
+		       MakeBooleanAccessor(&DdsaRoutingProtocolAdapter::dumb),
+		       MakeBooleanChecker())
+	.AddTraceSource ("RouteComputed", "Called when a new route computation is performed",
+			 MakeTraceSourceAccessor (&DdsaRoutingProtocolAdapter::m_newRouteComputedTrace),
+			 "ns3::ddsa::DdsaRoutingProtocolAdapter::NewRouteComputedTracedCallback");
       return tid;
     }
 
@@ -70,12 +78,19 @@ namespace ns3 {
     DdsaRoutingProtocolAdapter::CalculateProbabilities()
     {
       double costSomatory = SumUpNotExcludedDapCosts();
+      double probabilitySum = 0.0;
 
       for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
       	{
-	  //We only account for non-excluded Daps
-	  if (!it->second.excluded)
+	  if (dumb)
 	    {
+	      // In dumb mode all daps have the same selection probability regardless of their costs
+	      it->second.probability = 1 / (double)m_gateways.size();
+	    }
+	  else if (!it->second.excluded)
+	    {
+	      //In normal mode we only account for non-excluded Daps
+
 	      if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_HIGHER)
 		{
 		  //If the cost is the highest possible, the probability is set to the highest value (p = 1) as well
@@ -86,6 +101,8 @@ namespace ns3 {
 		  //If the cost is the lowest possible, the probability is set to the highest value (p = 1)
 		  it->second.probability = it->second.cost == 0 ? 0 : 1 / (it->second.cost * costSomatory);
 		}
+
+	      probabilitySum+= it->second.probability;
 	    }
       	}
     }
@@ -93,39 +110,45 @@ namespace ns3 {
     bool
     DdsaRoutingProtocolAdapter::ExcludeDaps()
     {
-    	double highestProb = 0;
-    	double lambda = 0;
-    	bool excluded = false;
+      //In dumb mode no daps are excluded
+      if (dumb)
+	{
+	  return false;
+	}
 
-    	if (alpha == 0)
-    	{
-    		return false;
-    	}
+      double highestProb = 0;
+      double lambda = 0;
+      bool excluded = false;
 
-    	for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
-	  {
-    	    if (it->second.probability > highestProb)
-	      {
-		highestProb = it->second.probability;
-	      }
-	  }
+      if (alpha == 0)
+      {
+	      return false;
+      }
 
-    	lambda = alpha * highestProb;
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+	{
+	  if (it->second.probability > highestProb)
+	    {
+	      highestProb = it->second.probability;
+	    }
+	}
 
-    	for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
-    	  {
-	    if (it->second.probability < lambda)
-	      {
-		it->second.excluded = true;
-		excluded = true;
-	      }
-	    else
-	      {
-		it->second.excluded = false;
-	      }
-    	  }
+      lambda = alpha * highestProb;
 
-    	return excluded;
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+	{
+	  if (it->second.probability < lambda)
+	    {
+	      it->second.excluded = true;
+	      excluded = true;
+	    }
+	  else
+	    {
+	      it->second.excluded = false;
+	    }
+	}
+
+      return excluded;
     }
 
     Dap
@@ -139,12 +162,13 @@ namespace ns3 {
 
       std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin();
 
+
       while (it != m_gateways.end() && !dapFound)
       	{
 
 	  prob_sum += it->second.probability;
 
-      	  if (!it->second.excluded && prob_sum >= rand)
+      	  if ((!it->second.excluded || dumb) && prob_sum >= rand)
       	    {
       	      selectedDap = it->second;
       	      dapFound = true;
@@ -266,6 +290,15 @@ namespace ns3 {
       RoutingProtocol::RoutingTableComputation();
       UpdateDapCosts();
       BuildEligibleGateways();
+
+      std::vector<Dap> daps;
+
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+      	{
+      	  daps.push_back(it->second);
+      	}
+
+      m_newRouteComputedTrace(daps);
     }
 
     Ptr<Ipv4Route>

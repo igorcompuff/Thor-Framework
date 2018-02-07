@@ -71,7 +71,10 @@ class DdsaTopologyTest
     double GetCoordinate(std::stringstream * coordStream);
     std::vector<Vector> GetPreviousRedundancyDapsPositions();
     Ipv4Address GetNodeAddress(const Ptr<NetDevice> & device, const Ptr<Node> node);
-
+    void SenderRouteUpdated(std::vector<ddsa::Dap> daps);
+    double CalculateMeanCost(const Ipv4Address & dapAddress);
+    Ptr<NetDevice> GetOlsrDeviceForNode(Ptr<Node> node);
+    Ipv4Address GetIpAddressForOlsrNode(Ptr<Node> node);
 
     std::string phyMode;
     uint32_t totalDaps; //Total number of Daps
@@ -86,6 +89,7 @@ class DdsaTopologyTest
     double gridYShift; // Vertical distance between two meters in the grid
     int gridColumns;
     int gridRows;
+    uint32_t senderNodeIndex;
     Ptr<LogDistancePropagationLossModel> myLossModel;
     YansWifiPhyHelper myWifiPhy;
     Ipv4InterfaceContainer olsrIpv4Devices;
@@ -95,6 +99,7 @@ class DdsaTopologyTest
     NetDeviceContainer csmaDevices;
     int minRedundancy;
     Ptr<UniformRandomVariable> m_rnd;
+    std::map<Ipv4Address, std::vector<Dap> > costHistory;
 };
 
 DdsaTopologyTest::DdsaTopologyTest (): phyMode ("DsssRate1Mbps")
@@ -110,6 +115,7 @@ DdsaTopologyTest::DdsaTopologyTest (): phyMode ("DsssRate1Mbps")
     withFailure = false;
     ddsaEnabled = true;
     minRedundancy = 1;
+    senderNodeIndex = 3;
 
     m_rnd = CreateObject<UniformRandomVariable>();
 }
@@ -133,6 +139,7 @@ DdsaTopologyTest::Parse(int argc, char *argv[])
   cmd.AddValue ("failure", "Cause the failure of one DAP", withFailure);
   cmd.AddValue ("ddsaenabled", "Enable ddsa", ddsaEnabled);
   cmd.AddValue ("redundancy", "Minimal redundancy", minRedundancy);
+  cmd.AddValue ("sender", "The id of the sender meter. If invalid, no meter will send anything (Default).", senderNodeIndex);
 
   cmd.Parse (argc, argv);
 }
@@ -336,6 +343,12 @@ DdsaTopologyTest::ConfigureMeterStack(LqOlsrHelper & helper)
   Ipv4L3ProtocolDdsaAdapter::NodeType mType = ddsaEnabled ? Ipv4L3ProtocolDdsaAdapter::NodeType::METER :
 							    Ipv4L3ProtocolDdsaAdapter::NodeType::NON_DDSA;
   ConfigureStack(helper, meters, mType);
+
+  Ptr<Node> sender = meters.Get(senderNodeIndex);
+
+  Ptr<ns3::ddsa::DdsaRoutingProtocolAdapter> rp = sender->GetObject<ddsa::DdsaRoutingProtocolAdapter>();
+  NS_ASSERT (rp);
+  rp->TraceConnectWithoutContext("RouteComputed", MakeCallback(&DdsaTopologyTest::SenderRouteUpdated, this));
 }
 
 void
@@ -399,6 +412,8 @@ DdsaTopologyTest::ConfigureNodesStack()
   ConfigureDapsHna();
 }
 
+
+
 void
 DdsaTopologyTest::ConfigureIpAddressing()
 {
@@ -410,6 +425,34 @@ DdsaTopologyTest::ConfigureIpAddressing()
 
   ipv4.SetBase (Ipv4Address("172.16.1.0"), "255.255.255.0");
   csmaIpv4Devices = ipv4.Assign (csmaDevices);
+}
+
+Ptr<NetDevice>
+DdsaTopologyTest::GetOlsrDeviceForNode(Ptr<Node> node)
+{
+  for (uint32_t i = 0; i < olsrDevices.GetN (); ++i)
+    {
+      Ptr<NetDevice> device = olsrDevices.Get (i);
+
+      if (device->GetNode()->GetId() == node->GetId())
+	{
+	  return device;
+	}
+    }
+
+  return NULL;
+}
+
+Ipv4Address
+DdsaTopologyTest::GetIpAddressForOlsrNode(Ptr<Node> node)
+{
+  Ptr<NetDevice> device = GetOlsrDeviceForNode(node);
+
+  Ptr<Ipv4> ipv4 = node->GetObject<Ipv4> ();
+
+  int32_t interface = ipv4->GetInterfaceForDevice(device);
+
+  return ipv4->GetAddress(interface, 0).GetLocal();
 }
 
 bool
@@ -429,6 +472,36 @@ DdsaTopologyTest::ComplyWithMinRedundancy()
 }
 
 void
+DdsaTopologyTest::SenderRouteUpdated(std::vector<ddsa::Dap> daps)
+{
+  if (daps.size() == this->daps.GetN())
+    {
+      for(std::vector<ddsa::Dap>::iterator it = daps.begin(); it != daps.end(); it++)
+	{
+	  costHistory[it->address].push_back(*it);
+	}
+    }
+}
+
+double
+DdsaTopologyTest::CalculateMeanCost(const Ipv4Address & dapAddress)
+{
+  if (costHistory.find(dapAddress) != costHistory.end())
+    {
+      std::vector<Dap> costs = costHistory[dapAddress];
+      double sum = 0;
+      for(std::vector<ddsa::Dap>::iterator it = costs.begin(); it != costs.end(); it++)
+	{
+	  sum+= it->cost;
+	}
+
+      return sum / costs.size();
+    }
+
+  return -1;
+}
+
+void
 DdsaTopologyTest::SaveDapsCurrentPosition()
 {
   std::ofstream statFile;
@@ -437,20 +510,18 @@ DdsaTopologyTest::SaveDapsCurrentPosition()
 
   statFile.open(fileName, std::ofstream::out | std::ofstream::app);
 
-  for(NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
+  for (uint32_t i = 0; i < daps.GetN (); ++i)
     {
-      Ptr<MobilityModel> model = (*it)->GetObject<MobilityModel>();
+      Ptr<Node> node = daps.Get (i);
+      Ptr<MobilityModel> model = node->GetObject<MobilityModel>();
 
       if (model != NULL)
-	{
-	  statFile << "Dap: " << (*it)->GetId() << "\n";
-	  statFile << "X = " << model->GetPosition().x << "\n";
-	  statFile << "Y = " << model->GetPosition().y << "\n";
-	  statFile << "\n";
-	}
+      	{
+      	  statFile << "X = " << model->GetPosition().x << "\n";
+      	  statFile << "Y = " << model->GetPosition().y << "\n";
+      	  statFile << "Cost = " << CalculateMeanCost(GetIpAddressForOlsrNode(node)) << "\n";
+      	}
     }
-
-  statFile << "######################################################\n";
 
   statFile.close();
 }
@@ -480,12 +551,13 @@ int main (int argc, char *argv[])
 
   Simulator::Stop (Seconds (200.0));
   Simulator::Run ();
-  Simulator::Destroy ();
 
   if (simulation.ComplyWithMinRedundancy())
     {
       simulation.SaveDapsCurrentPosition();
     }
+
+  Simulator::Destroy ();
 
   return 0;
 }

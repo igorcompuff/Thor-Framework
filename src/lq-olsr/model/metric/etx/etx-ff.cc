@@ -82,6 +82,8 @@ Etx::NotifyMessageReceived(uint16_t packetSeqNumber,
   if (it == m_links_info.end())
     {
       m_links_info[senderIface].SetMaxQueueSize(etx_memory_length);
+      m_links_info[senderIface].senderAddress = senderIface;
+      m_links_info[senderIface].receiverAddress = receiverIface;
       it = m_links_info.find(senderIface);
       created = true;
     }

@@ -41,20 +41,25 @@ namespace ns3 {
 	double GetAlpha();
 	Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Address dstAddr, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
 	int GetNRetransmissions();
-	Dap SelectDap();
+	virtual Dap SelectDap();
 	int GetTotalCurrentEligibleDaps();
+
+	typedef void (* NewRouteComputedTracedCallback)
+		    (std::vector<Dap> daps);
 
       protected:
 
 	virtual Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
 	virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
+	virtual void CalculateProbabilities();
+	virtual bool ExcludeDaps();
 	void RoutingTableComputation ();
 
       private:
 
-	void CalculateProbabilities();
+
 	double SumUpNotExcludedDapCosts();
-	bool ExcludeDaps();
+
 	void AssociationTupleTimerExpire (Ipv4Address address);
 	void BuildEligibleGateways();
 	bool DapExists(const Ipv4Address & dapAddress);
@@ -64,6 +69,9 @@ namespace ns3 {
 	double alpha;
 	Ptr<UniformRandomVariable> m_rnd;
 	int n_retransmissions;
+	bool dumb;
+
+	TracedCallback<std::vector<Dap> > m_newRouteComputedTrace;
 
 
     };
