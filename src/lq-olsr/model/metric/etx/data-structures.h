@@ -38,6 +38,7 @@ namespace lqmetric {
       void SetCurent(int value);
       int SetMaxSize(std::vector<int>::size_type max_size);
       int Sum();
+      int At(int pos);
   };
 
   struct EtxInfo

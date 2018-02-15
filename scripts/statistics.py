@@ -1,6 +1,7 @@
 import collections, os, math
 
 Statistics = collections.namedtuple("Statistics", "redundancy mean std_dev delta")
+StatisticsMode = collections.namedtuple("StatisticsMode", "mode mean std_dev delta")
 
 def parse(file):
 	f = open(file, 'r')
@@ -49,6 +50,76 @@ def saveStatisticsForRedundancyComp(filePath, stat):
         
     file.close()
 
+def saveStatisticsForModeComp(filePath, stat):
+    file = open(filePath, 'a')
+    file.write(str(stat.mode) + "\t" + str(stat.mean) + "\t" + str(stat.delta) + "\n")
+
+    file.close()
+
+def getModeStatistics(baseDir, redundancy, mode):
+	dataList = []
+	modeDir = os.path.join(baseDir, mode)
+	redundancyDir = os.path.join(modeDir, str(redundancy))
+	
+	if not os.path.exists(redundancyDir):
+		print("Redundancy " + str(redundancy) + " for mode " + mode + " do not exist.")
+		
+		return dataList
+
+	for topology in os.listdir(redundancyDir):
+		topologyDir = os.path.join(redundancyDir, topology)
+
+		for r in os.listdir(topologyDir):
+			roundDir = os.path.join(topologyDir,r)
+			
+			for name in os.listdir(roundDir):			
+				if not "statistics" in name:
+					continue
+				statisticsFile = os.path.join(roundDir,name)
+				data = parse(statisticsFile)
+				dataList.append(data)
+				print(statisticsFile)
+	return dataList
+
+def statisticsForModeComparison(baseDir, redundancy):
+	plotDir = os.path.join(baseDir,"plot")
+
+	if not os.path.exists(plotDir):
+        	os.makedirs(plotDir)
+
+	statFile = os.path.join(plotDir,"delivery_rate.dat")
+	
+	if os.path.exists(statFile):
+		os.remove(statFile)
+	
+	ddsaList = getModeStatistics(baseDir, redundancy, "Ddsa")
+	etxList = getModeStatistics(baseDir, redundancy, "Etx")
+	dumbList = getModeStatistics(baseDir, redundancy, "Ddsa_Dumb")
+
+	mean = calculateMean(ddsaList, "d_rate")
+	stdDev = calculateStandardDev(ddsaList, mean, "d_rate")
+	delta = calculateDelta(ddsaList, stdDev)
+	
+	stat = StatisticsMode(mode="Ddsa", mean=mean, std_dev=stdDev, delta=delta)
+
+	saveStatisticsForModeComp(statFile, stat)
+
+	mean = calculateMean(etxList, "d_rate")
+        stdDev = calculateStandardDev(etxList, mean, "d_rate")
+        delta = calculateDelta(etxList, stdDev)
+
+        stat = StatisticsMode(mode="Etx", mean=mean, std_dev=stdDev, delta=delta)
+
+        saveStatisticsForModeComp(statFile, stat)
+
+	mean = calculateMean(dumbList, "d_rate")
+        stdDev = calculateStandardDev(dumbList, mean, "d_rate")
+        delta = calculateDelta(dumbList, stdDev)
+
+        stat = StatisticsMode(mode="Dumb_Ddsa", mean=mean, std_dev=stdDev, delta=delta)
+
+        saveStatisticsForModeComp(statFile, stat)
+
 def statisticsForRedundancyComp(baseDir, redMin, redMax):
 	for i in range(redMin, redMax + 1):
  		dataList = []
@@ -57,7 +128,6 @@ def statisticsForRedundancyComp(baseDir, redMin, redMax):
 				continue
 			execDir = os.path.join(os.path.join(baseDir,topology),str(i))
 			execDir = os.path.join(execDir,"Ddsa")
-			#print(execDir)
 			for r in os.listdir(execDir):
 				roundDir = os.path.join(execDir,r)
 				statisticsFile = os.path.join(roundDir,"statistics_ddsa.txt")
@@ -72,7 +142,6 @@ def statisticsForRedundancyComp(baseDir, redMin, redMax):
 		stat = Statistics(redundancy=i, mean=mean, std_dev=stdDev, delta=delta)
 
 		plotDir = os.path.join(baseDir,"plot")
-		#plotDir = os.path.join(plotDir, str(i)
 
 		if not os.path.exists(plotDir):
 			os.makedirs(plotDir)
@@ -92,22 +161,6 @@ def statisticsForRedundancyComp(baseDir, redMin, redMax):
                 saveStatisticsForRedundancyComp(statFile, stat)
 		
 
-	#dir = baseDir + "redundancy_" + str(i)
-        #dataList = []
-        #dirfilter = ["nonddsa", "nofailure", "pcap"]
-        #extractData(dir, dataList, dirfilter)
-        #mean = calculateMean(dataList, "d_rate")
-        #std_dev = calculateStandardDev(dataList, mean, "d_rate")
-        #delta = calculateDelta(dataList, std_dev)
-
-        #stat = Statistics(mean=mean, std_dev=std_dev, delta=delta)
-
-        #saveStatisticsForRedundancyComp("/home/igor/Documents/gnuplot.data", stat, i )   
-
-        #print("################# Redundancy = " + str(i) + "#########################")
-        #print("Mean: " + str(stat.mean))
-        #print("StdDev: " + str(std_dev))
-        #print("Delta: " + str(delta))
-        #print("\n")
-
-statisticsForRedundancyComp("/home/igor/github/ns-3.26/redundancytest/results", 1, 10)
+#statisticsForRedundancyComp("/home/igor/github/ns-3.26/redundancytest/results", 1, 10)
+statisticsForModeComparison("/home/igor/github/ns-3.26/topologies/results_failure", 3)
+#statisticsForModeComparison("/home/igor/github/ns-3.26/topologies/results", 3)

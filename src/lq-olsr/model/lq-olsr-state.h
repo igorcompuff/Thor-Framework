@@ -251,8 +251,8 @@ namespace lqolsr {
      * \param now The time at which the link should be considered symmetrical
      * \param metric The metric used to compare the costs
      */
-    LinkTuple *
-    FindBestLinkToNeighbor(const Ipv4Address & neighborMainAddress, Time now, Ptr<lqmetric::LqAbstractMetric> metric);
+//    LinkTuple *
+//    FindBestLinkToNeighbor(const Ipv4Address & neighborMainAddress, Time now, Ptr<lqmetric::LqAbstractMetric> metric);
 
     /**
      * Finds a link tuple.

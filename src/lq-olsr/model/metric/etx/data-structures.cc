@@ -58,6 +58,12 @@ LifoQueue::GetSize()
 }
 
 int
+LifoQueue::At(int pos)
+{
+  return list.at(pos);
+}
+
+int
 LifoQueue::SetMaxSize(std::vector<int>::size_type max_size)
 {
   return this->max_size = max_size;

@@ -43,6 +43,8 @@ namespace ns3 {
 	int GetNRetransmissions();
 	virtual Dap SelectDap();
 	int GetTotalCurrentEligibleDaps();
+	void SetControllerAddress(Ipv4Address address);
+	Ipv4Address GetControllerAddress();
 
 	typedef void (* NewRouteComputedTracedCallback)
 		    (std::vector<Dap> daps);
@@ -60,20 +62,21 @@ namespace ns3 {
 
 	double SumUpNotExcludedDapCosts();
 
-	void AssociationTupleTimerExpire (Ipv4Address address);
+	void AssociationTupleTimerExpire (Ipv4Address gatewayAddr, Ipv4Address networkAddr, Ipv4Mask netmask);
 	void BuildEligibleGateways();
 	bool DapExists(const Ipv4Address & dapAddress);
 	void UpdateDapCosts();
+	void PrintDaps (Ptr<OutputStreamWrapper> stream) const;
+	void ClearDapExclusions();
 
 	std::map<Ipv4Address, Dap> m_gateways;
 	double alpha;
 	Ptr<UniformRandomVariable> m_rnd;
 	int n_retransmissions;
 	bool dumb;
+	Ipv4Address controllerAddress;
 
 	TracedCallback<std::vector<Dap> > m_newRouteComputedTrace;
-
-
     };
 
   }

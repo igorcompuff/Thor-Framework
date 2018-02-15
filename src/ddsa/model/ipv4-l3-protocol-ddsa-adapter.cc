@@ -68,7 +68,23 @@ namespace ns3 {
 	  return;
 	}
 
-      if (m_type == NodeType::METER && route && route->GetGateway () != Ipv4Address ())
+      Ptr<Ipv4RoutingProtocol> ipRoutingProt = GetRoutingProtocol();
+      Ptr<DdsaRoutingProtocolAdapter> ddsaRoutingProt = Ipv4RoutingHelper::GetRouting<DdsaRoutingProtocolAdapter>(ipRoutingProt);
+
+      if (!ddsaRoutingProt)
+	{
+	  return;
+	}
+
+
+
+      bool nodeIsMeter = m_type == NodeType::METER;
+      bool routeGwExists = route && route->GetGateway () != Ipv4Address ();
+      bool l3Protocol = protocol == 6 || protocol == 17;
+
+      bool shouldDdsaProcess = nodeIsMeter && routeGwExists && l3Protocol;
+
+      if (shouldDdsaProcess)
 	{
 	  Ptr<Ipv4RoutingProtocol> ipRoutingProt = GetRoutingProtocol();
 
@@ -92,6 +108,7 @@ namespace ns3 {
 
 	      if (selectedDap.address == Ipv4Address::GetBroadcast())
 	      {
+		  NS_LOG_DEBUG("[" << source << "] No Daps Available at " << Simulator::Now().GetSeconds() << " s");
 		  continue;
 	      }
 	      m_dapSelectionTrace(selectedDap.address, packet->Copy());

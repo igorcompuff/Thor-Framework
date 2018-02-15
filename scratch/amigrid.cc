@@ -16,6 +16,7 @@
 #include "ns3/applications-module.h"
 #include "ns3/ddsa-internet-stack-helper.h"
 #include "ns3/ipv4-l3-protocol-ddsa-adapter.h"
+#include "ns3/ddsa-routing-protocol-adapter.h"
 #include "ns3/integer.h"
 #include "ns3/simple-header.h"
 #include <iostream>
@@ -36,15 +37,13 @@ NS_LOG_COMPONENT_DEFINE ("amigrid");
 struct LatencyInfo
 {
   public:
-    int64_t time_sent;
-    int64_t time_received;
-    bool received;
+    Time time_sent;
+    Time time_received;
 
     LatencyInfo()
     {
-      time_sent = 0;
-      time_received = 0;
-      received = false;
+      time_sent = Time::Max();
+      time_received = Time::Max();;
     }
 };
 
@@ -53,12 +52,16 @@ struct AmiPacketInfo
   private:
     uint16_t seqNumber;
     int nReceived;
+    LatencyInfo latency;
+    bool received;
   public:
 
     AmiPacketInfo()
     {
       seqNumber = 0;
       nReceived = 0;
+      received = false;
+      //latency = LatencyInfo();
     }
 
     uint16_t GetSeqNumber()
@@ -79,6 +82,33 @@ struct AmiPacketInfo
     int GetNReceived()
     {
       return nReceived;
+    }
+
+    void SetLatency(LatencyInfo latency)
+    {
+      this->latency = latency;
+    }
+
+    LatencyInfo GetLatency()
+    {
+      return latency;
+    }
+
+    void Receive()
+    {
+      this->received = true;
+      latency.time_received = Simulator::Now();
+      nReceived = 1;
+    }
+
+    void Send()
+    {
+      latency.time_sent = Simulator::Now();
+    }
+
+    bool Received()
+    {
+      return received;
     }
 };
 
@@ -184,18 +214,17 @@ class AmiGridSim
     NetDeviceContainer csmaDevices;
 
     //Statistics
-    int totalSentApplicationPackets;
     int totalSentCopies;
-    std::vector<uint16_t> receivedPackets;
+
+    std::map<uint16_t, AmiPacketInfo > packetsSent;
 
     std::map<Ipv4Address, std::vector<AmiPacketInfo> > dapSelectionHistory;
-    std::map<uint16_t, uint32_t > totalPerSeqNumber;
     std::map<Ipv4Address, std::vector<Dap> > costHistory;
-    std::map<uint16_t, LatencyInfo > latencyPerPacket;
     int ddsa_retrans;
     int redundancy;
     bool dumb;
     std::string topologyFile;
+    Time failureTime;
 };
 
 AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
@@ -214,7 +243,6 @@ AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
     senderNodeIndex = 3;
     withFailure = false;
     ddsaEnabled = true;
-    totalSentApplicationPackets = 0;
     totalSentCopies = 0;
     ddsa_retrans = 0;
     redundancy = 0;
@@ -289,7 +317,6 @@ AmiGridSim::CreateMetersPosition()
 
   return positionAlloc;
 }
-
 double
 AmiGridSim::GetCoordinate(std::stringstream * coordStream)
 {
@@ -299,7 +326,6 @@ AmiGridSim::GetCoordinate(std::stringstream * coordStream)
 
   return std::atof(token.substr(1).c_str());
 }
-
 Vector
 AmiGridSim::GetVector(std::string xStr, std::string yStr)
 {
@@ -313,7 +339,6 @@ AmiGridSim::GetVector(std::string xStr, std::string yStr)
 
 
 }
-
 std::vector<Vector>
 AmiGridSim::GetDapPositions()
 {
@@ -334,7 +359,6 @@ AmiGridSim::GetDapPositions()
 
   return positions;
 }
-
 Ptr<ListPositionAllocator>
 AmiGridSim::CreateDapsPosition(std::vector<Vector> positions)
 {
@@ -349,7 +373,6 @@ AmiGridSim::CreateDapsPosition(std::vector<Vector> positions)
 
   return positionAlloc;
 }
-
 Ptr<ListPositionAllocator>
 AmiGridSim::CreateDapsPosition()
 {
@@ -370,7 +393,6 @@ AmiGridSim::CreateDapsPosition()
 
   return positionAlloc;
 }
-
 Ptr<ListPositionAllocator>
 AmiGridSim::CreateControllerPosition()
 {
@@ -379,7 +401,6 @@ AmiGridSim::CreateControllerPosition()
 
   return positionAlloc;
 }
-
 void
 AmiGridSim::InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<ListPositionAllocator> dapsPosition, Ptr<ListPositionAllocator> controllerPosition)
 {
@@ -395,7 +416,6 @@ AmiGridSim::InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<
   mobility.SetPositionAllocator (controllerPosition);
   mobility.Install (controllers);
 }
-
 void
 AmiGridSim::ConfigureWifi()
 {
@@ -429,7 +449,6 @@ AmiGridSim::ConfigureWifi()
   myWifiPhy.EnablePcap ("olsr-hna", olsrDevices, false);
 
 }
-
 void
 AmiGridSim::CreateControllerLan()
 {
@@ -440,7 +459,6 @@ AmiGridSim::CreateControllerLan()
   csmaDevices = csma.Install (NodeContainer (controllers, daps));
   csma.EnablePcap ("csma", csmaDevices, false);
 }
-
 void
 AmiGridSim::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, Ipv4L3ProtocolDdsaAdapter::NodeType nType )
 {
@@ -450,7 +468,6 @@ AmiGridSim::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, 
   ddsa.SetNodeType(nType);
   ddsa.Install (nodes);
 }
-
 void
 AmiGridSim::ConfigureDapStack(LqOlsrHelper & helper)
 {
@@ -472,7 +489,6 @@ AmiGridSim::ConfigureDapStack(LqOlsrHelper & helper)
 	}
     }
 }
-
 void
 AmiGridSim::ConfigureMeterStack(LqOlsrHelper & helper)
 {
@@ -495,7 +511,6 @@ AmiGridSim::ConfigureMeterStack(LqOlsrHelper & helper)
        rp->TraceConnectWithoutContext("RouteComputed", MakeCallback(&AmiGridSim::SenderRouteUpdated, this));
      }
 }
-
 void
 AmiGridSim::ConfigureControllerStack()
 {
@@ -503,7 +518,6 @@ AmiGridSim::ConfigureControllerStack()
 
   internet.Install (controllers);
 }
-
 Ipv4ListRoutingHelper
 AmiGridSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
 {
@@ -514,7 +528,6 @@ AmiGridSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
 
   return list;
 }
-
 void
 AmiGridSim::ConfigureDapsHna()
 {
@@ -556,7 +569,6 @@ AmiGridSim::ConfigureDapsHna()
 	}
     }
 }
-
 void
 AmiGridSim::ConfigureNodesStack()
 {
@@ -568,12 +580,12 @@ AmiGridSim::ConfigureNodesStack()
   DDsaHelper meterHelper(metricTid);
   meterHelper.Set("Retrans", IntegerValue(ddsa_retrans));
   meterHelper.Set("Dumb", BooleanValue(dumb));
+  //meterHelper.Set("Alpha", DoubleValue(0.8));
   ConfigureMeterStack(ddsaEnabled ? meterHelper : helper);
 
   ConfigureControllerStack();
   ConfigureDapsHna();
 }
-
 void
 AmiGridSim::ConfigureIpAddressing()
 {
@@ -585,8 +597,30 @@ AmiGridSim::ConfigureIpAddressing()
 
   ipv4.SetBase (Ipv4Address("172.16.1.0"), "255.255.255.0");
   csmaIpv4Devices = ipv4.Assign (csmaDevices);
-}
 
+  if (!ddsaEnabled)
+    {
+      return;
+    }
+
+  for (uint32_t i = 0; i < csmaDevices.GetN (); ++i)
+    {
+      Ptr<NetDevice> device = csmaDevices.Get(i);
+      Ptr<Node> node = device->GetNode();
+
+      if (node->GetId() == controllers.Get(0)->GetId())
+	{
+	  for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
+	    {
+	      Ptr<ns3::ddsa::DdsaRoutingProtocolAdapter> ddsaRp = (*it)->GetObject<ns3::ddsa::DdsaRoutingProtocolAdapter>();
+	      NS_ASSERT (ddsaRp);
+	      Ptr<Ipv4> ipv4 = node->GetObject<Ipv4> ();
+	      int32_t interface = ipv4->GetInterfaceForDevice (device);
+	      ddsaRp->SetControllerAddress(ipv4->GetAddress(interface, 0).GetLocal());
+	    }
+	}
+    }
+}
 void
 AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
 {
@@ -618,7 +652,6 @@ AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
   apps.Start (start);
   apps.Stop (stop);
 }
-
 void
 AmiGridSim::ConfigureControllerSocket(uint16_t port)
 {
@@ -629,7 +662,6 @@ AmiGridSim::ConfigureControllerSocket(uint16_t port)
   recvController->Bind (local);
   recvController->SetRecvCallback (MakeCallback (&AmiGridSim::ControllerReceivePacket, this));
 }
-
 void
 AmiGridSim::ConfigureDapSocket(uint16_t port)
 {
@@ -655,6 +687,7 @@ AmiGridSim::SenderRouteUpdated(std::vector<ddsa::Dap> daps)
       for(std::vector<ddsa::Dap>::iterator it = daps.begin(); it != daps.end(); it++)
 	{
 	  costHistory[it->address].push_back(*it);
+	  NS_LOG_UNCOND("DAP " << it->address << " updated: " << it->cost << " at " << Simulator::Now().GetSeconds());
 	}
     }
 }
@@ -744,9 +777,13 @@ AmiGridSim::ApplicationPacketSent(Ptr<const Packet> packetSent)
   if (packetSent->PeekHeader(amiHeader) != 0)
     {
       NS_LOG_UNCOND ("Application packet" << amiHeader.GetPacketSequenceNumber() << " sent at" << " at " << Simulator::Now().GetSeconds() << " seconds.");
-      totalSentApplicationPackets++;
       uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-      latencyPerPacket[seqNumber].time_sent = Simulator::Now().GetMilliSeconds();
+      AmiPacketInfo info;
+
+      info.SetSeqNumber(seqNumber);
+      info.Send();
+
+      packetsSent[seqNumber] = info;
     }
   else
     {
@@ -767,17 +804,15 @@ AmiGridSim::ControllerReceivePacket (Ptr<Socket> socket)
 	{
 	  uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
 
-	  if (std::find(receivedPackets.begin(), receivedPackets.end(), seqNumber) == receivedPackets.end())
+	  NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds());
+
+	  if (! packetsSent[seqNumber].Received())
 	    {
-	      NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds());
-	      receivedPackets.push_back(seqNumber);
-	      totalPerSeqNumber[seqNumber] = 1;
-	      latencyPerPacket[seqNumber].time_received = Simulator::Now().GetMilliSeconds();
-	      latencyPerPacket[seqNumber].received = true;
+	      packetsSent[seqNumber].Receive();
 	    }
 	  else
 	    {
-	      totalPerSeqNumber[seqNumber]++;
+	      packetsSent[seqNumber].IncrementReceived();
 	    }
 	}
       else
@@ -822,9 +857,10 @@ AmiGridSim::SendPacketToController(Ptr<Packet> packet, Ptr<Node> node)
 void
 AmiGridSim::SheduleFailure(double time)
 {
+  failureTime = Seconds (time);
   if (withFailure)
     {
-      m_events.Track (Simulator::Schedule (Seconds (time), &AmiGridSim::ExecuteFailure, this, daps.Get(0)));
+      m_events.Track (Simulator::Schedule (failureTime, &AmiGridSim::ExecuteFailure, this, daps.Get(0)));
     }
 }
 
@@ -861,7 +897,18 @@ AmiGridSim::ComplyWithMinRedundancy()
 double
 AmiGridSim::CalculateDeliveryRate()
 {
-  return 100 * receivedPackets.size() / (double)totalSentApplicationPackets;
+  int totalReceived = 0;
+
+  for (std::map<uint16_t, AmiPacketInfo >::iterator it = packetsSent.begin(); it != packetsSent.end(); it++)
+    {
+      if (it->second.Received())
+	{
+	  totalReceived++;
+	}
+    }
+
+
+  return 100 * totalReceived / (double)packetsSent.size();
 }
 
 double
@@ -889,14 +936,36 @@ void
 AmiGridSim::GenerateControllerReceptionStatistics()
 {
   std::ofstream statFile;
-  statFile.open("controller.txt");
-  for(std::map<uint16_t, uint32_t>::iterator it = totalPerSeqNumber.begin();
-      it != totalPerSeqNumber.end(); it++)
+  statFile.open("packets.txt");
+
+
+  for (std::map<uint16_t, AmiPacketInfo >::iterator it = packetsSent.begin(); it != packetsSent.end(); it++)
     {
-      LatencyInfo l_info = latencyPerPacket[it->first];
-      int64_t latency = l_info.time_received - l_info.time_sent;
-      statFile << "Seq " << it->first << "(" << latency << "ms)" << ": " << it->second << " copies received from " << ddsa_retrans + 1 << " sent.\n";
+      statFile << "Packet " << it->first << " -----------------------";
+      statFile << (it->second.Received() ? "\n" : "(Lost)\n");
+
+      statFile << "Sent at: " << it->second.GetLatency().time_sent.GetSeconds() << " seconds\n";
+
+      if (it->second.Received())
+	{
+	  int64_t latency = it->second.GetLatency().time_received.GetMilliSeconds() - it->second.GetLatency().time_sent.GetMilliSeconds();
+
+	  statFile << "Received at: " << it->second.GetLatency().time_received.GetSeconds() << " seconds";
+
+	  if (withFailure && it->second.GetLatency().time_received >= failureTime)
+	    {
+	      statFile << "(After failure)\n";
+	    }
+	  else
+	    {
+	      statFile << "\n";
+	    }
+
+	  statFile << "Latency: " << latency << "ms \n";
+	  statFile << "Received copies: " << it->second.GetNReceived() << "\n\n";
+	}
     }
+
   statFile.close();
 }
 
@@ -922,17 +991,19 @@ double
 AmiGridSim::CalculateMeanLatency()
 {
   int64_t sum = 0;
+  int totalReceived = 0;
 
-  for(std::map<uint16_t, LatencyInfo >::iterator it = latencyPerPacket.begin(); it != latencyPerPacket.end(); it++)
+  for (std::map<uint16_t, AmiPacketInfo >::iterator it = packetsSent.begin(); it != packetsSent.end(); it++)
     {
-      if (it->second.received)
+      if (it->second.Received())
 	{
-	  int64_t latency = it->second.time_received - it->second.time_sent;
+	  int64_t latency = it->second.GetLatency().time_received.GetMilliSeconds() - it->second.GetLatency().time_sent.GetMilliSeconds();
 	  sum+= latency;
+	  totalReceived++;
 	}
     }
 
-  return (double)sum / latencyPerPacket.size();
+  return (double)sum / totalReceived;
 }
 
 double
@@ -958,7 +1029,7 @@ AmiGridSim::GenerateDapStatistics()
 {
   std::ofstream statFile;
 
-  int total = ddsaEnabled ? totalSentCopies : totalSentApplicationPackets;
+  int total = ddsaEnabled ? totalSentCopies : packetsSent.size();
 
   for(std::map<Ipv4Address, std::vector<AmiPacketInfo> >::iterator it = dapSelectionHistory.begin();
       it != dapSelectionHistory.end(); it++)
@@ -1014,13 +1085,9 @@ AmiGridSim::GenerateGeneralStatistics()
 
   statFile.open (fileName);
   statFile << "Statistics generated from the AmiGrid simulation.\n";
-  statFile << "p_sent:" << totalSentApplicationPackets << "//Number of application packets sent" << std::endl;
-  statFile << "c_sent:" << (ddsaEnabled ? totalSentCopies : totalSentApplicationPackets) << "//Number of copies sent" << std::endl;
-  statFile << "p_recv:" << receivedPackets.size() << "//Number of packets received" << std::endl;
   statFile << "d_rate:" << CalculateDeliveryRate() << "%" << "//Delivery rate" << std::endl;
   statFile << "l_rate: " << CalculateLossRate() << "%" << "//Loss rate" << std::endl;
   statFile << "l_avg: " << CalculateMeanLatency() << " ms" << "//Average latency" << std::endl;
-  statFile << (ComplyWithMinRedundancy() ? "Comply with minimal redundancy" : "Do not comply with minimal redundancy");
 
   statFile.close();
 }
@@ -1054,18 +1121,18 @@ int main (int argc, char *argv[])
   simulation.ConfigureIpAddressing();
 
   uint16_t port = 80;
-  Time metersStart = Seconds(20.0);
-  Time metersStop = Seconds(190.0);
+  Time metersStart = Seconds(50.0);
+  Time metersStop = Seconds(200.0);
 
   simulation.ConfigureMeterApplication(port, metersStart, metersStop);
   simulation.ConfigureControllerSocket(port);
   simulation.ConfigureDapSocket(port);
-  simulation.SheduleFailure(60);
+  simulation.SheduleFailure(90);
 
   //Log
-  //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_ALL);
-  //LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
-  //LogComponentEnable("Etx", LOG_LEVEL_ALL);
+  //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
+  LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
+  //LogComponentEnable("Etx", LOG_LEVEL_DEBUG);
   //LogComponentEnable("YansWifiPhy", LOG_LEVEL_DEBUG);
   //LogComponentEnable("DdsaRoutingProtocolDapAdapter", LOG_LEVEL_DEBUG);
   //LogComponentEnable("Ipv4L3ProtocolDdsaAdapter", LOG_LEVEL_DEBUG);

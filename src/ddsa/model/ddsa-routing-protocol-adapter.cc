@@ -1,5 +1,7 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 
+#define NS_LOG_APPEND_CONTEXT std::clog << "[node " << GetMyMainAddress() << "] (" << Simulator::Now().GetSeconds() << " s) ";
+
 #include "ns3/log.h"
 #include "ns3/double.h"
 #include "ns3/boolean.h"
@@ -46,6 +48,8 @@ namespace ns3 {
       m_rnd = CreateObject<UniformRandomVariable>();
       m_rnd->SetAttribute("Min", DoubleValue(0));
       m_rnd->SetAttribute("Max", DoubleValue(1));
+      controllerAddress = Ipv4Address::GetBroadcast();
+      dumb = false;
     }
 
     DdsaRoutingProtocolAdapter::~DdsaRoutingProtocolAdapter(){}
@@ -55,11 +59,12 @@ namespace ns3 {
     DdsaRoutingProtocolAdapter::SumUpNotExcludedDapCosts()
     {
       double costSomatory = 0.0;
-
+      int totalDaps = 0;
       for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
 	{
 	  if (!it->second.excluded)
 	    {
+	      totalDaps++;
 	      if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_HIGHER)
 		{
 		  costSomatory += it->second.cost;
@@ -70,6 +75,8 @@ namespace ns3 {
 		}
 	    }
 	}
+
+      NS_LOG_DEBUG("Cost somatory = " << costSomatory << " Total DAPS = " << totalDaps);
 
       return costSomatory;
     }
@@ -107,6 +114,15 @@ namespace ns3 {
       	}
     }
 
+    void
+    DdsaRoutingProtocolAdapter::ClearDapExclusions()
+    {
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+      	{
+	  it->second.excluded = false;
+      	}
+    }
+
     bool
     DdsaRoutingProtocolAdapter::ExcludeDaps()
     {
@@ -120,6 +136,8 @@ namespace ns3 {
       double lambda = 0;
       bool excluded = false;
 
+      Dap dapHighestProb;
+
       if (alpha == 0)
       {
 	      return false;
@@ -130,25 +148,59 @@ namespace ns3 {
 	  if (it->second.probability > highestProb)
 	    {
 	      highestProb = it->second.probability;
+	      dapHighestProb = it->second;
 	    }
 	}
 
+      NS_LOG_DEBUG("DAP " << dapHighestProb.address << " has the highest probability (" << highestProb << ")");
+
       lambda = alpha * highestProb;
+
+      NS_LOG_DEBUG("Lambda = " << lambda);
 
       for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
 	{
 	  if (it->second.probability < lambda)
 	    {
-	      it->second.excluded = true;
-	      excluded = true;
+	      if (!it->second.excluded && (GetTotalCurrentEligibleDaps() -1) >= 2 )
+		{
+		  it->second.excluded = true;
+		  excluded = true;
+		  NS_LOG_DEBUG("Dap " << it->second.address << " excluded.");
+		  NS_LOG_DEBUG("Prob = " << it->second.probability << ", Lambda = " << lambda);
+		}
 	    }
 	  else
 	    {
+	      if (it->second.excluded)
+		{
+		  NS_LOG_DEBUG("Dap " << it->second.address << " is no longer excluded.");
+		}
+
 	      it->second.excluded = false;
 	    }
 	}
 
       return excluded;
+    }
+
+    void
+    DdsaRoutingProtocolAdapter::PrintDaps (Ptr<OutputStreamWrapper> stream) const
+    {
+      std::ostream* os = stream->GetStream ();
+
+      *os << "Dap\t\tProbability\tCost\tStatus\n";
+
+      for (std::map<Ipv4Address, Dap>::const_iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+      	{
+	  lqolsr::RoutingTableEntry entry;
+
+	  if (Lookup (it->second.address, entry))
+	    {
+	      std::string status = it->second.excluded ? "Excluded" : "Not Excluded";
+	      *os << it->second.address << "\t" << it->second.probability << "\t\t" << entry.cost << "\t" << status << "\n";
+	    }
+      	}
     }
 
     Dap
@@ -207,25 +259,34 @@ namespace ns3 {
     }
 
     void
-    DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire (Ipv4Address address)
+    DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire (Ipv4Address gatewayAddr, Ipv4Address networkAddr, Ipv4Mask netmask)
     {
-      std::map<Ipv4Address, Dap>::iterator it = m_gateways.find(address);
+      std::map<Ipv4Address, Dap>::iterator it = m_gateways.find(gatewayAddr);
 
-      if (it == m_gateways.end())
-        {
-          return;
-        }
-
-      if (it->second.expirationTime <= Simulator::Now ())
-        {
+      if (it != m_gateways.end() && it->second.expirationTime <= Simulator::Now ())
+	{
+	  NS_LOG_DEBUG("DAP " << it->second.address << " expired.");
 	  m_gateways.erase(it);
-        }
-      else
-        {
-          m_events.Track (Simulator::Schedule (DELAY (it->second.expirationTime),
-                                               &DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire,
-                                               this, it->first));
-        }
+	}
+
+      RoutingProtocol::AssociationTupleTimerExpire(gatewayAddr, networkAddr, netmask);
+
+//      if (it == m_gateways.end())
+//        {
+//          return;
+//        }
+//
+//      if (it->second.expirationTime <= Simulator::Now ())
+//        {
+//	  NS_LOG_DEBUG("DAP " << it->second.address << " expired.");
+//	  m_gateways.erase(it);
+//        }
+//      else
+//        {
+//          m_events.Track (Simulator::Schedule (DELAY (it->second.expirationTime),
+//                                               &DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire,
+//                                               this, it->first));
+//        }
     }
 
     bool
@@ -275,11 +336,21 @@ namespace ns3 {
     {
       lqolsr::RoutingTableEntry rEntry;
 
-      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+      std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin();
+
+      while(it != m_gateways.end())
 	{
 	  if (Lookup(it->first, rEntry))
 	    {
 	      it->second.cost = rEntry.cost;
+	      it++;
+	    }
+	  else
+	    {
+	      NS_LOG_DEBUG("DAP " << it->second.address << " is no longer available.");
+	      it->second.cost = m_metric->GetInfinityCostValue();
+	      //it = m_gateways.erase(it);
+	      it++;
 	    }
 	}
     }
@@ -288,8 +359,16 @@ namespace ns3 {
     DdsaRoutingProtocolAdapter::RoutingTableComputation ()
     {
       RoutingProtocol::RoutingTableComputation();
+      ClearDapExclusions();
       UpdateDapCosts();
       BuildEligibleGateways();
+
+      if (g_log.IsEnabled(LOG_LEVEL_DEBUG) && GetTotalCurrentEligibleDaps() > 0)
+	{
+	  NS_LOG_DEBUG("Dumping all DAPS.");
+	  Ptr<OutputStreamWrapper> outStream = Create<OutputStreamWrapper>(&std::clog);
+	  PrintDaps(outStream);
+	}
 
       std::vector<Dap> daps;
 
@@ -304,6 +383,15 @@ namespace ns3 {
     Ptr<Ipv4Route>
     DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
     {
+
+
+
+
+
+
+
+
+
       //This method can be removed later
       return RoutingProtocol::RouteOutput(p, header, oif, sockerr);
     }
@@ -341,6 +429,19 @@ namespace ns3 {
     DdsaRoutingProtocolAdapter::GetNRetransmissions()
     {
       return n_retransmissions;
+    }
+
+    void
+    DdsaRoutingProtocolAdapter::SetControllerAddress(Ipv4Address address)
+    {
+      controllerAddress = address;
+      NS_LOG_DEBUG("Controller address set: " << controllerAddress);
+    }
+
+    Ipv4Address
+    DdsaRoutingProtocolAdapter::GetControllerAddress()
+    {
+      return controllerAddress;
     }
   }
 }

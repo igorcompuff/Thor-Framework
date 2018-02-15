@@ -254,6 +254,15 @@ protected:
   Ipv4Address GetMyMainAddress();
 
   /**
+     * \brief Removes association tuple_ if expired. Else timer is rescheduled to expire at tuple_->time().
+     *
+     * \param gatewayAddr The gateway address.
+     * \param networkAddr The network address.
+     * \param netmask  The network mask.
+     */
+    virtual void AssociationTupleTimerExpire (Ipv4Address gatewayAddr, Ipv4Address networkAddr, Ipv4Mask netmask);
+
+  /**
    *
    * \brief Processes a HNA message following \RFC{3626} specification.
    *
@@ -580,15 +589,6 @@ private:
    * \param ifaceAddr The interface address.
    */
   void IfaceAssocTupleTimerExpire (Ipv4Address ifaceAddr);
-
-  /**
-   * \brief Removes association tuple_ if expired. Else timer is rescheduled to expire at tuple_->time().
-   *
-   * \param gatewayAddr The gateway address.
-   * \param networkAddr The network address.
-   * \param netmask  The network mask.
-   */
-  void AssociationTupleTimerExpire (Ipv4Address gatewayAddr, Ipv4Address networkAddr, Ipv4Mask netmask);
 
   /**
    * Increments the ANSN counter.

@@ -33,9 +33,10 @@ class Simulation:
 		for j in range(1, self.rounds + 1):
                 	print("Round " + str(j))        	
 			roundDir = os.path.join(os.path.join(outputRedDir, self.getMode()), str(j))
-			os.makedirs(roundDir)
-
-			call(["./execsim.sh", str(j), str(self.retransmissions), self.failureOption, self.ddsaOption, self.redundancy, topologyFile, self.dumbOption])
+			print("Round directory: " + roundDir)
+			if not os.path.exists(roundDir):
+				os.makedirs(roundDir)
+				call(["./execsim.sh", str(j), str(self.retransmissions), self.failureOption, self.ddsaOption, self.redundancy, topologyFile, self.dumbOption])
 
                         for f in os.listdir("./"):
                         	if f.endswith('.txt') or f.endswith('.pcap'):

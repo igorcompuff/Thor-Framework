@@ -5,6 +5,7 @@
 #include "ns3/simulator.h"
 #include "ns3/lq-olsr-routing-protocol.h"
 #include "ns3/log.h"
+#include <string>
 
 namespace ns3{
 
@@ -53,7 +54,7 @@ Etx::Timeout(EtxInfo * info)
   info->metricHelloTime = CalculateHelloTime(info->metricHelloInterval);
   info->timeoutEvtId = Simulator::Schedule (DELAY (info->metricHelloTime), &Etx::Timeout, this, info);
 
-  NS_LOG_DEBUG("Timeout. N Lost hellos = " << info->metricLostHellos);
+  NS_LOG_DEBUG("Timeout for " << info->senderAddress << ". N Lost hellos = " << info->metricLostHellos << " at " << Simulator::Now().GetSeconds());
 }
 
 Time
@@ -218,49 +219,81 @@ Etx::Compute(EtxInfo * info)
 
   int sum_received = info->metricReceivedLifo.Sum();
   int sum_total = info->metricTotalLifo.Sum();
-  //int sum_penalty = sum_received;
-  //float penalty = 0;
+  float sum_penalty = sum_received;
+  float penalty = 0;
 
   NS_LOG_DEBUG("Sum Received = " << sum_received << " Sum Total = " << sum_total);
 
   if (info->metricLostHellos > 0)
     {
-      //penalty = info->metricHelloInterval.GetSeconds() * ((float)info->metricLostHellos / etx_memory_length);
+      penalty = (float)info->metricHelloInterval.GetSeconds() * ((double)info->metricLostHellos / etx_memory_length);
 
-      //sum_penalty -= sum_received * penalty;
+      sum_penalty -= sum_received * penalty;
 
-      NS_LOG_DEBUG("Has penalty. Lost Hellos =  " << info->metricLostHellos);
+      NS_LOG_DEBUG("Has penalty = " << penalty << " for " << info->senderAddress << ". Lost Hellos =  " << info->metricLostHellos);
+      NS_LOG_DEBUG("Sum Penalty = " << sum_penalty);
     }
 
-  info->metric_r_etx = (double)sum_received / (sum_total + info->metricLostHellos);
+  //info->metric_r_etx = (double)sum_received / (sum_total + info->metricLostHellos);
 
-  if (info->metric_r_etx < 0.01)
+
+  if (sum_penalty >= 1 && sum_total > 0)
+    {
+      info->metric_r_etx = sum_penalty / sum_total;
+    }
+  else
     {
       info->metric_r_etx = UNDEFINED_VALUE;
-      info->metricValue = INFINITY_COST;
     }
-  else if (info->metric_d_etx == UNDEFINED_VALUE)
+
+  if (info->metric_r_etx == UNDEFINED_VALUE || info->metric_d_etx == UNDEFINED_VALUE)
     {
       info->metricValue = INFINITY_COST;
     }
   else
     {
       float x = (etx_perfect_metric * info->metric_d_etx * info->metric_r_etx);
-
-      if (x > 0)
-	{
-	  info->metricValue = 1 / x;
-	}
-      else
-	{
-	  info->metricValue = INFINITY_COST;
-	}
+      info->metricValue = x > 0 ? 1 / x : INFINITY_COST;
     }
+
+//  if (info->metric_r_etx < 0.01)
+//    {
+//      info->metric_r_etx = UNDEFINED_VALUE;
+//      info->metricValue = INFINITY_COST;
+//    }
+//  else if (info->metric_d_etx == UNDEFINED_VALUE)
+//    {
+//      info->metricValue = INFINITY_COST;
+//    }
+//  else
+//    {
+//      float x = (etx_perfect_metric * info->metric_d_etx * info->metric_r_etx);
+//
+//      if (x > 0)
+//	{
+//	  info->metricValue = 1 / x;
+//	}
+//      else
+//	{
+//	  info->metricValue = INFINITY_COST;
+//	}
+//    }
 
   info->metricReceivedLifo.Push(0);
   info->metricTotalLifo.Push(0);
 
-  NS_LOG_DEBUG("Computation finished. New cost = " << info->metricValue << "(Rx = " << info->metric_r_etx << ", Dx = " << info->metric_d_etx << ").");
+  NS_LOG_DEBUG("Computation finished for link " << info->senderAddress << " -------" << info->receiverAddress << ". New cost = " << info->metricValue << "(Rx = " << info->metric_r_etx << ", Dx = " << info->metric_d_etx << ").");
+  NS_LOG_DEBUG("Sender = " << info->senderAddress << " Sum_Total = " << sum_total << " Sum_received = " << sum_received << " Lost helllos = " << info->metricLostHellos << " LastSeqNumber = " << info->metricLastPktSeqno.m_sequenceNumber);
+
+  NS_LOG_DEBUG("Total:");
+  std::string msg = "";
+
+  for (int i = 0; i < info->metricTotalLifo.GetSize(); i++)
+    {
+      msg += (std::to_string(info->metricTotalLifo.At(i)) + ", ");
+
+    }
+  NS_LOG_DEBUG(msg);
 
   Time nextSched = Simulator::Now() +  etx_metric_interval;
   m_events.Track (Simulator::Schedule (DELAY (nextSched), &Etx::Compute, this, info));
@@ -319,6 +352,7 @@ float
 Etx::Compound(float cost1, float cost2)
 {
   float newCost = cost1 + cost2;
+  NS_LOG_DEBUG("Compounded = " << newCost);
   return newCost >= INFINITY_COST ? INFINITY_COST : newCost;
 }
 

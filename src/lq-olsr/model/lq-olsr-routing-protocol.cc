@@ -653,8 +653,8 @@ RoutingProtocol::InitializeDestinations()
 		dest.destAddress = it2->neighborIfaceAddr;
 		dest.accessLink = &(*it2);
 		m_destinations.push_back(dest);
-		m_costs[it2->neighborIfaceAddr] = it2->cost;
-
+		m_costs[it2->neighborIfaceAddr] = m_metric->GetCost(it2->neighborIfaceAddr);//it2->cost;
+		NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[it2->neighborIfaceAddr]);
 		added = true;
 	      }
 
@@ -670,6 +670,8 @@ RoutingProtocol::InitializeDestinations()
 	      m_costs[it->neighborMainAddr] = m_costs[lastAdded.destAddress];
 	      lastAdded.destAddress = it->neighborMainAddr;
 	      m_destinations.push_back(lastAdded);
+
+	      NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[lastAdded.destAddress]);
 	    }
 	}
     }
@@ -690,6 +692,8 @@ RoutingProtocol::InitializeDestinations()
 	  {
 	    m_destinations.push_back(dest);
 	    m_costs[top->destAddr] = m_metric->GetInfinityCostValue();
+
+	    NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[top->destAddr]);
 	  }
     }
 }
@@ -909,10 +913,15 @@ RoutingProtocol::CalculateHNARoutingTable()
 	{
 	  addRoute = true;
 	}
-      else if (gatewayEntryExists && m_hnaRoutingTable->GetMetric (routeIndex) > gatewayEntry.distance)
+      else //if (gatewayEntryExists && m_hnaRoutingTable->GetMetric (routeIndex) > gatewayEntry.distance)
 	{
-	  m_hnaRoutingTable->RemoveRoute (routeIndex);
-	  addRoute = true;
+	  float gwRouteCost = unpack754_32(m_hnaRoutingTable->GetMetric (routeIndex));
+
+	  if (gatewayEntryExists && m_metric->CompareBest(gatewayEntry.cost, gwRouteCost) > 0)
+	    {
+	      m_hnaRoutingTable->RemoveRoute (routeIndex);
+	      addRoute = true;
+	    }
 	}
 
       if (addRoute && gatewayEntryExists)
@@ -923,7 +932,6 @@ RoutingProtocol::CalculateHNARoutingTable()
 						gatewayEntry.nextAddr,
 						gatewayEntry.interface,
 						cost);
-
 	}
     }
 }
@@ -1147,6 +1155,7 @@ void
 RoutingProtocol::ProcessHna (const lqolsr::MessageHeader &msg,
                              const Ipv4Address &senderIface)
 {
+  NS_LOG_DEBUG("Received HNA message from " << msg.GetOriginatorAddress());
   const lqolsr::MessageHeader::Hna &hna = msg.GetHna ();
   Time now = Simulator::Now ();
 
@@ -1502,10 +1511,22 @@ RoutingProtocol::SendTc ()
       LinkTuple *link_tuple = m_state.FindLinkTuple ( mprsel_tuple->mainAddr);
 
       if (link_tuple != NULL)
-      {
-	neigh_info.metricInfo = pack754_32(link_tuple->cost);
-	lqtc.neighborAddresses.push_back (neigh_info);
-      }
+	{
+	  RoutingTableEntry outEntry;
+	  float cost;
+	  if(Lookup (link_tuple->neighborIfaceAddr, outEntry))
+	    {
+	      cost = outEntry.cost;
+	    }
+	  else
+	    {
+	      cost = m_metric->GetCost(link_tuple->neighborIfaceAddr);
+	    }
+
+
+	  neigh_info.metricInfo = pack754_32(cost);//link_tuple->cost);
+	  lqtc.neighborAddresses.push_back (neigh_info);
+	}
     }
     QueueMessage (msg, JITTER);
 }
@@ -1680,7 +1701,7 @@ RoutingProtocol::CreateNewLinkTuple(LinkTuple &newLinkTuple, const Ipv4Address &
   newLinkTuple.localIfaceAddr = receiverIface;
   newLinkTuple.symTime = now - Seconds (1);
   newLinkTuple.time = now + vtime;
-  newLinkTuple.cost = m_metric->GetInfinityCostValue();
+  //newLinkTuple.cost = m_metric->GetInfinityCostValue();
 }
 
 void
@@ -1752,7 +1773,7 @@ RoutingProtocol::ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr
                 && nt != OLSR_NOT_NEIGH))
           {
             NS_LOG_LOGIC ("HELLO link code is invalid => IGNORING");
-            link_tuple->cost = m_metric->GetInfinityCostValue();
+            //link_tuple->cost = m_metric->GetInfinityCostValue();
             continue;
           }
 
@@ -1769,7 +1790,7 @@ RoutingProtocol::ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr
                   {
                     NS_LOG_LOGIC ("link is LOST => expiring it");
                     link_tuple->symTime = now - Seconds (1);
-                    link_tuple->cost = m_metric->GetInfinityCostValue();
+                    //link_tuple->cost = m_metric->GetInfinityCostValue();
                     updated = true;
                   }
                 else if (lt == OLSR_SYM_LINK || lt == OLSR_ASYM_LINK)
@@ -1778,13 +1799,13 @@ RoutingProtocol::ProcessLqHelloLinkMessages(LinkTuple *link_tuple,  const lqolsr
                                   " (symTime being increased to " << now + vTime);
                     link_tuple->symTime = now + vTime;
                     link_tuple->time = link_tuple->symTime + OLSR_NEIGHB_HOLD_TIME;
-                    link_tuple->cost = m_metric->GetCost(link_tuple->neighborIfaceAddr);
+                    //link_tuple->cost = m_metric->GetCost(link_tuple->neighborIfaceAddr);
                     updated = true;
                   }
                 else
                   {
                     NS_FATAL_ERROR ("bad link type");
-                    link_tuple->cost = m_metric->GetInfinityCostValue();
+                    //link_tuple->cost = m_metric->GetInfinityCostValue();
                   }
                 break;
               }
@@ -2337,6 +2358,7 @@ RoutingProtocol::LinkTupleTimerExpire (Ipv4Address neighborIfaceAddr)
     }
   if (tuple->time < now)
     {
+      NS_LOG_DEBUG("Neighbor Expired: " << neighborIfaceAddr);
       RemoveLinkTuple (*tuple);
     }
   else if (tuple->symTime < now)
@@ -2454,6 +2476,7 @@ RoutingProtocol::AssociationTupleTimerExpire (Ipv4Address gatewayAddr, Ipv4Addre
   if (tuple->expirationTime < Simulator::Now ())
     {
       RemoveAssociationTuple (*tuple);
+      NS_LOG_DEBUG("DAP Expired");
     }
   else
     {
