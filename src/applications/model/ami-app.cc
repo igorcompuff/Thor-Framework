@@ -15,6 +15,7 @@
 #include "ns3/node.h"
 #include "ns3/nstime.h"
 #include "ns3/double.h"
+#include "ns3/integer.h"
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("AmiApplication");
@@ -36,6 +37,10 @@ AmiApplication::GetTypeId (void)
                    TypeIdValue (UdpSocketFactory::GetTypeId ()),
                    MakeTypeIdAccessor (&AmiApplication::m_socketTid),
                    MakeTypeIdChecker ())
+     .AddAttribute ("Retrans", "Number of Retransmissions",
+			    IntegerValue (0),
+			    MakeIntegerAccessor(&AmiApplication::m_nRetransmissions),
+			    MakeIntegerChecker<int> (0))
     .AddTraceSource ("Tx", "A new packet is created and is sent",
                      MakeTraceSourceAccessor (&AmiApplication::m_txTrace),
                      "ns3::Packet::TracedCallback")
@@ -50,6 +55,7 @@ AmiApplication::AmiApplication()
   m_rnd = CreateObject<UniformRandomVariable>();
   m_rnd->SetAttribute("Min", DoubleValue(0));
   m_rnd->SetAttribute("Max", DoubleValue(10000));
+  m_nRetransmissions = 0;
 }
 
 AmiApplication::~AmiApplication(){}
@@ -105,13 +111,18 @@ AmiApplication::SendPacket ()
 
   ami::AmiHeader header;
   header.SetPacketSequenceNumber(m_seqNumber++);
-  header.SetReadingInfo(m_rnd->GetInteger());
+  header.SetNodeId(m_node->GetId());
+  header.SetReadingInfo(1);//m_rnd->GetInteger());
 
   packet->AddHeader(header);
 
-  m_txTrace (packet);
-  m_socket->Send (packet);
-  NS_LOG_DEBUG("(" << Simulator::Now().GetSeconds() << ") Sent packet " << header.GetPacketSequenceNumber());
+  for (int i = 1; i<= (m_nRetransmissions + 1); i++)
+    {
+      m_socket->Send (packet);
+      m_txTrace (packet);
+      NS_LOG_DEBUG("(" << Simulator::Now().GetSeconds() << ") Sent packet copy " << header.GetPacketSequenceNumber());
+    }
+
   m_sendEvent = Simulator::Schedule (Seconds(1), &AmiApplication::SendPacket, this);
 }
 

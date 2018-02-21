@@ -9,6 +9,8 @@
 #include "ns3/lq-olsr-repositories.h"
 #include <algorithm>
 #include "ddsa-routing-protocol-adapter.h"
+#include "ns3/udp-header.h"
+#include "ns3/simple-header.h"
 
 namespace ns3 {
 
@@ -29,27 +31,27 @@ namespace ns3 {
                        DoubleValue (0.0),
                        MakeDoubleAccessor (&DdsaRoutingProtocolAdapter::alpha),
 		       MakeDoubleChecker<double> (0))
-        .AddAttribute ("Retrans", "Number of Retransmissions",
-                       IntegerValue (0),
-                       MakeIntegerAccessor(&DdsaRoutingProtocolAdapter::n_retransmissions),
-                       MakeIntegerChecker<int> (0))
 	.AddAttribute ("Dumb", "Dumb mode",
 		       BooleanValue(false),
 		       MakeBooleanAccessor(&DdsaRoutingProtocolAdapter::dumb),
 		       MakeBooleanChecker())
 	.AddTraceSource ("RouteComputed", "Called when a new route computation is performed",
 			 MakeTraceSourceAccessor (&DdsaRoutingProtocolAdapter::m_newRouteComputedTrace),
-			 "ns3::ddsa::DdsaRoutingProtocolAdapter::NewRouteComputedTracedCallback");
+			 "ns3::ddsa::DdsaRoutingProtocolAdapter::NewRouteComputedTracedCallback")
+	.AddTraceSource ("DapSelection", "Calleds when a new dap is selected",
+				 MakeTraceSourceAccessor (&DdsaRoutingProtocolAdapter::m_dapSelectionTrace),
+				 "ns3::ddsa::DdsaRoutingProtocolAdapter::SelectedTracedCallback");
       return tid;
     }
 
-    DdsaRoutingProtocolAdapter::DdsaRoutingProtocolAdapter(): alpha (0.0), n_retransmissions (0)
+    DdsaRoutingProtocolAdapter::DdsaRoutingProtocolAdapter(): alpha (0.0)
     {
       m_rnd = CreateObject<UniformRandomVariable>();
       m_rnd->SetAttribute("Min", DoubleValue(0));
       m_rnd->SetAttribute("Max", DoubleValue(1));
       controllerAddress = Ipv4Address::GetBroadcast();
       dumb = false;
+      m_type = NodeType::METER;
     }
 
     DdsaRoutingProtocolAdapter::~DdsaRoutingProtocolAdapter(){}
@@ -208,37 +210,24 @@ namespace ns3 {
     {
       double rand = m_rnd->GetValue();
       double prob_sum = 0;
+
       Dap selectedDap;
       selectedDap.address = Ipv4Address::GetBroadcast();
-      bool dapFound = false;
 
-      std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin();
-
-
-      while (it != m_gateways.end() && !dapFound)
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
       	{
+	  if (!it->second.excluded)
+	    {
+	      prob_sum += it->second.probability;
 
-	  prob_sum += it->second.probability;
-
-      	  if ((!it->second.excluded || dumb) && prob_sum >= rand)
-      	    {
-      	      selectedDap = it->second;
-      	      dapFound = true;
-      	    }
-
-      	  it++;
+	      if (prob_sum >= rand)
+		{
+		  selectedDap = it->second;
+		  NS_LOG_DEBUG("Dap: " << selectedDap.address << " selected by " << GetMyMainAddress());
+		  break;
+		}
+	    }
       	}
-
-      Ipv4Address m_address = GetMyMainAddress();
-      if (selectedDap.address != Ipv4Address::GetBroadcast())
-	{
-	  NS_LOG_DEBUG("Dap: " << selectedDap.address << " selected by " << m_address);
-	}
-      else
-	{
-	  NS_LOG_DEBUG("No DAP Selected by node " << m_address);
-	}
-
 
       return selectedDap;
     }
@@ -263,30 +252,17 @@ namespace ns3 {
     {
       std::map<Ipv4Address, Dap>::iterator it = m_gateways.find(gatewayAddr);
 
-      if (it != m_gateways.end() && it->second.expirationTime <= Simulator::Now ())
+      if (it != m_gateways.end() && it->second.expirationTime < Simulator::Now ())
 	{
-	  NS_LOG_DEBUG("DAP " << it->second.address << " expired.");
 	  m_gateways.erase(it);
+
+	  NS_LOG_DEBUG("DAP " << it->second.address << " expired. Now we have " << m_gateways.size() << " Daps.");
+
+	  ClearDapExclusions();
+	  BuildEligibleGateways();
 	}
 
       RoutingProtocol::AssociationTupleTimerExpire(gatewayAddr, networkAddr, netmask);
-
-//      if (it == m_gateways.end())
-//        {
-//          return;
-//        }
-//
-//      if (it->second.expirationTime <= Simulator::Now ())
-//        {
-//	  NS_LOG_DEBUG("DAP " << it->second.address << " expired.");
-//	  m_gateways.erase(it);
-//        }
-//      else
-//        {
-//          m_events.Track (Simulator::Schedule (DELAY (it->second.expirationTime),
-//                                               &DdsaRoutingProtocolAdapter::AssociationTupleTimerExpire,
-//                                               this, it->first));
-//        }
     }
 
     bool
@@ -329,6 +305,17 @@ namespace ns3 {
 	}
 
       RoutingProtocol::ProcessHna(msg, senderIface);
+    }
+
+    void
+    DdsaRoutingProtocolAdapter::SendTc()
+    {
+      if (m_type == NodeType::DAP)
+	{
+	  return;
+	}
+
+      lqolsr::RoutingProtocol::SendTc();
     }
 
     void
@@ -383,29 +370,45 @@ namespace ns3 {
     Ptr<Ipv4Route>
     DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
     {
+      Ptr<Ipv4Route> route = 0;
+
+      /*
+       * 1 - The controller is the destination. All packets directed to the controller should be redirected
+       * to the selected DAP, so DDSA should process it.
+       */
+      if (header.GetDestination() == controllerAddress && m_type == NodeType::METER)
+	{
+	  if (m_gateways.size() > 0)
+	  {
+	    Dap selectedDap = SelectDap();
+
+	    m_dapSelectionTrace(selectedDap.address, p->Copy());
+
+	    header.SetDestination (selectedDap.address);
+
+	    route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
+	  }
+	  else
+	    {
+	      NS_LOG_DEBUG("No dap available. Trying to find a route.");
+
+//	      lqolsr::RoutingTableEntry gatewayEntry;
+//
+//	      route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
+	    }
+	}
+      /*
+       * 2 - In case the destination is not the controller, DDSA does not perform any action in addition to
+       * OLSR.
+       */
+      else
+	{
+	  route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
+	}
 
 
-
-
-
-
-
-
-
-      //This method can be removed later
-      return RoutingProtocol::RouteOutput(p, header, oif, sockerr);
+      return route;
     }
-
-    Ptr<Ipv4Route>
-    DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Address dstAddr, Ptr<NetDevice> oif,
-					     Socket::SocketErrno &sockerr)
-    {
-      Ipv4Header header;
-      header.SetDestination (dstAddr);
-
-      return RouteOutput(p, header, oif, sockerr);
-    }
-
 
     void
     DdsaRoutingProtocolAdapter::BuildEligibleGateways()
@@ -425,12 +428,6 @@ namespace ns3 {
       return alpha;
     }
 
-    int
-    DdsaRoutingProtocolAdapter::GetNRetransmissions()
-    {
-      return n_retransmissions;
-    }
-
     void
     DdsaRoutingProtocolAdapter::SetControllerAddress(Ipv4Address address)
     {
@@ -443,6 +440,30 @@ namespace ns3 {
     {
       return controllerAddress;
     }
+
+    Dap
+    DdsaRoutingProtocolAdapter::GetBestCostDap()
+    {
+      Dap bestDap;
+      bestDap.cost = m_metric->GetInfinityCostValue();
+
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+	{
+	  if (m_metric->CompareBest(it->second.cost, bestDap.cost) > 0)
+	    {
+	      bestDap = it->second;
+	    }
+	}
+
+      return bestDap;
+    }
+
+    void
+    DdsaRoutingProtocolAdapter::SetNodeType(NodeType nType)
+    {
+      m_type = nType;
+    }
+
   }
 }
 

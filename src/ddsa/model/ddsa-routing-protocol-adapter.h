@@ -30,6 +30,11 @@ namespace ns3 {
     {
       public:
 
+      enum NodeType
+      {
+	METER, DAP
+      };
+
 	/**
 	 * \brief Get the type ID.
 	 * \return The object TypeId.
@@ -39,19 +44,22 @@ namespace ns3 {
 	DdsaRoutingProtocolAdapter ();
 	virtual ~DdsaRoutingProtocolAdapter ();
 	double GetAlpha();
-	Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Address dstAddr, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
-	int GetNRetransmissions();
-	virtual Dap SelectDap();
 	int GetTotalCurrentEligibleDaps();
 	void SetControllerAddress(Ipv4Address address);
 	Ipv4Address GetControllerAddress();
+	Dap GetBestCostDap();
+	void SetNodeType(NodeType nType);
 
 	typedef void (* NewRouteComputedTracedCallback)
 		    (std::vector<Dap> daps);
 
+	typedef void (* SelectedTracedCallback)
+		    (const Ipv4Header & header, Ptr<Packet> packet);
+
       protected:
 
 	virtual Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
+	virtual void SendTc ();
 	virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
 	virtual void CalculateProbabilities();
 	virtual bool ExcludeDaps();
@@ -68,15 +76,17 @@ namespace ns3 {
 	void UpdateDapCosts();
 	void PrintDaps (Ptr<OutputStreamWrapper> stream) const;
 	void ClearDapExclusions();
+	Dap SelectDap();
 
 	std::map<Ipv4Address, Dap> m_gateways;
 	double alpha;
 	Ptr<UniformRandomVariable> m_rnd;
-	int n_retransmissions;
 	bool dumb;
 	Ipv4Address controllerAddress;
 
 	TracedCallback<std::vector<Dap> > m_newRouteComputedTrace;
+	TracedCallback<const Ipv4Address &, Ptr<Packet> > m_dapSelectionTrace;
+	NodeType m_type;
     };
 
   }

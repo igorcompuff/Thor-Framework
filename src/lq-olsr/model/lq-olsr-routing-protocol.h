@@ -235,6 +235,9 @@ public:
    */
   Ptr<const Ipv4StaticRouting> GetRoutingTableAssociation () const;
 
+  //This method is only for Ddsa simulation porpouse
+  Ipv4Address GetBestHnaGateway();
+
 protected:
   virtual void DoInitialize (void);
   Ptr<ns3::lqmetric::LqAbstractMetric> m_metric;
@@ -282,13 +285,18 @@ protected:
   virtual void RoutingTableComputation ();
 
   /**
-     * \brief Looks up an entry for the specified destination address.
-     * \param [in] dest Destination address.
-     * \param [out] outEntry Holds the routing entry result, if found.
-     * \return true if found, false if not found.
-     */
-    bool Lookup (const Ipv4Address &dest,
-                 RoutingTableEntry &outEntry) const;
+   * \brief Looks up an entry for the specified destination address.
+   * \param [in] dest Destination address.
+   * \param [out] outEntry Holds the routing entry result, if found.
+   * \return true if found, false if not found.
+   */
+  bool Lookup (const Ipv4Address &dest,
+	       RoutingTableEntry &outEntry) const;
+
+  /**
+   * \brief Creates a new %OLSR TC message which is buffered for being sent later on.
+   */
+  virtual void SendTc ();
 
 
 private:
@@ -638,11 +646,6 @@ private:
    * \brief Creates a new %OLSR HELLO message which is buffered for being sent later on.
    */
   void SendHello ();
-
-  /**
-   * \brief Creates a new %OLSR TC message which is buffered for being sent later on.
-   */
-  void SendTc ();
 
   /**
    * \brief Creates a new %OLSR MID message which is buffered for being sent later on.

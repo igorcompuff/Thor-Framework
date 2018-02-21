@@ -35,6 +35,7 @@
 #include "ns3/internet-trace-helper.h"
 #include "ns3/node.h"
 #include "ns3/ipv4-l3-protocol-ddsa-adapter.h"
+#include "ns3/ddsa-routing-protocol-adapter.h"
 
 namespace ns3 {
 
@@ -51,11 +52,12 @@ public:
 
   DdsaInternetStackHelper &operator = (const DdsaInternetStackHelper &o);
 
-  void SetNodeType(ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType nt);
+  void SetNodeType(ddsa::DdsaRoutingProtocolAdapter::NodeType nt);
 
 private:
   virtual void InstallIpv4Protocols (Ptr<Node> node) const;
-  ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType nodeType;
+  virtual void InstallIpv4Routing (Ptr<Node> node) const;
+  ddsa::DdsaRoutingProtocolAdapter::NodeType nodeType;
 
 
 };

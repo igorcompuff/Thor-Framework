@@ -61,7 +61,7 @@ class DdsaTopologyTest
 
   private:
     void Parse(int argc, char *argv[]);
-    void ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, Ipv4L3ProtocolDdsaAdapter::NodeType nType );
+    void ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, DdsaRoutingProtocolAdapter::NodeType nType );
     void ConfigureDapStack(LqOlsrHelper & helper);
     void ConfigureMeterStack(LqOlsrHelper & helper);
     Ipv4ListRoutingHelper ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing);
@@ -317,7 +317,7 @@ DdsaTopologyTest::CreateControllerLan()
 }
 
 void
-DdsaTopologyTest::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, Ipv4L3ProtocolDdsaAdapter::NodeType nType )
+DdsaTopologyTest::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, DdsaRoutingProtocolAdapter::NodeType nType )
 {
   Ipv4ListRoutingHelper ipv4Routing = ConfigureRouting(lqOlsrDapHelper);
   DdsaInternetStackHelper ddsa;
@@ -334,15 +334,13 @@ DdsaTopologyTest::ConfigureDapStack(LqOlsrHelper & helper)
       helper.ExcludeInterface (daps.Get (i), 2);
     }
 
-  ConfigureStack(helper, daps, Ipv4L3ProtocolDdsaAdapter::NodeType::DAP);
+  ConfigureStack(helper, daps, DdsaRoutingProtocolAdapter::NodeType::DAP);
 }
 
 void
 DdsaTopologyTest::ConfigureMeterStack(LqOlsrHelper & helper)
 {
-  Ipv4L3ProtocolDdsaAdapter::NodeType mType = ddsaEnabled ? Ipv4L3ProtocolDdsaAdapter::NodeType::METER :
-							    Ipv4L3ProtocolDdsaAdapter::NodeType::NON_DDSA;
-  ConfigureStack(helper, meters, mType);
+  ConfigureStack(helper, meters, DdsaRoutingProtocolAdapter::NodeType::METER);
 
   Ptr<Node> sender = meters.Get(senderNodeIndex);
 
@@ -405,7 +403,6 @@ DdsaTopologyTest::ConfigureNodesStack()
   ConfigureDapStack(helper);
 
   DDsaHelper meterHelper(metricTid);
-  meterHelper.Set("Retrans", IntegerValue(0));
   ConfigureMeterStack(meterHelper);
 
   ConfigureControllerStack();
@@ -525,6 +522,8 @@ DdsaTopologyTest::SaveDapsCurrentPosition()
 
   statFile.close();
 }
+
+
 
 int main (int argc, char *argv[])
 {

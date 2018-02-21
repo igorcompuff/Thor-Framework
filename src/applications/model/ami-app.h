@@ -70,8 +70,8 @@ class AmiApplication : public Application
     TypeId m_socketTid;
     EventId m_sendEvent;
     Ptr<UniformRandomVariable> m_rnd;
-
     TracedCallback<Ptr<const Packet> > m_txTrace;
+    int m_nRetransmissions;
 
     virtual void SendPacket ();
 

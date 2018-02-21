@@ -87,14 +87,20 @@ def statisticsForModeComparison(baseDir, redundancy):
 	if not os.path.exists(plotDir):
         	os.makedirs(plotDir)
 
-	statFile = os.path.join(plotDir,"delivery_rate.dat")
+	deliveryFile = os.path.join(plotDir,"delivery_rate.dat")
+	latencyFile = os.path.join(plotDir,"latency.dat")
 	
-	if os.path.exists(statFile):
-		os.remove(statFile)
+	if os.path.exists(deliveryFile):
+		os.remove(deliveryFile)
+
+	if os.path.exists(latencyFile):
+                os.remove(latencyFile)
 	
 	ddsaList = getModeStatistics(baseDir, redundancy, "Ddsa")
 	etxList = getModeStatistics(baseDir, redundancy, "Etx")
 	dumbList = getModeStatistics(baseDir, redundancy, "Ddsa_Dumb")
+
+	#Statistics for delivery rate
 
 	mean = calculateMean(ddsaList, "d_rate")
 	stdDev = calculateStandardDev(ddsaList, mean, "d_rate")
@@ -102,7 +108,7 @@ def statisticsForModeComparison(baseDir, redundancy):
 	
 	stat = StatisticsMode(mode="Ddsa", mean=mean, std_dev=stdDev, delta=delta)
 
-	saveStatisticsForModeComp(statFile, stat)
+	saveStatisticsForModeComp(deliveryFile, stat)
 
 	mean = calculateMean(etxList, "d_rate")
         stdDev = calculateStandardDev(etxList, mean, "d_rate")
@@ -110,7 +116,7 @@ def statisticsForModeComparison(baseDir, redundancy):
 
         stat = StatisticsMode(mode="Etx", mean=mean, std_dev=stdDev, delta=delta)
 
-        saveStatisticsForModeComp(statFile, stat)
+        saveStatisticsForModeComp(deliveryFile, stat)
 
 	mean = calculateMean(dumbList, "d_rate")
         stdDev = calculateStandardDev(dumbList, mean, "d_rate")
@@ -118,7 +124,33 @@ def statisticsForModeComparison(baseDir, redundancy):
 
         stat = StatisticsMode(mode="Dumb_Ddsa", mean=mean, std_dev=stdDev, delta=delta)
 
-        saveStatisticsForModeComp(statFile, stat)
+        saveStatisticsForModeComp(deliveryFile, stat)
+
+	#Statistics for latency
+
+	mean = calculateMean(ddsaList, "l_avg")
+        stdDev = calculateStandardDev(ddsaList, mean, "l_avg")
+        delta = calculateDelta(ddsaList, stdDev)
+
+        stat = StatisticsMode(mode="Ddsa", mean=mean, std_dev=stdDev, delta=delta)
+
+        saveStatisticsForModeComp(latencyFile, stat)
+
+        mean = calculateMean(etxList, "l_avg")
+        stdDev = calculateStandardDev(etxList, mean, "l_avg")
+        delta = calculateDelta(etxList, stdDev)
+
+        stat = StatisticsMode(mode="Etx", mean=mean, std_dev=stdDev, delta=delta)
+
+        saveStatisticsForModeComp(latencyFile, stat)
+
+        mean = calculateMean(dumbList, "l_avg")
+        stdDev = calculateStandardDev(dumbList, mean, "l_avg")
+        delta = calculateDelta(dumbList, stdDev)
+
+        stat = StatisticsMode(mode="Dumb_Ddsa", mean=mean, std_dev=stdDev, delta=delta)
+
+        saveStatisticsForModeComp(latencyFile, stat)
 
 def statisticsForRedundancyComp(baseDir, redMin, redMax):
 	for i in range(redMin, redMax + 1):
@@ -161,6 +193,6 @@ def statisticsForRedundancyComp(baseDir, redMin, redMax):
                 saveStatisticsForRedundancyComp(statFile, stat)
 		
 
-#statisticsForRedundancyComp("/home/igor/github/ns-3.26/redundancytest/results", 1, 10)
+statisticsForRedundancyComp("/home/igor/github/ns-3.26/redundancytest/results", 1, 10)
 statisticsForModeComparison("/home/igor/github/ns-3.26/topologies/results_failure", 3)
 #statisticsForModeComparison("/home/igor/github/ns-3.26/topologies/results", 3)

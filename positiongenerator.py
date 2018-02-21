@@ -4,14 +4,22 @@ import os
 
 TOTAL = 200
 
+
 def execute():
 	pos = 1
 	sim_round = pos;
 	while (pos <= TOTAL):
-		call(["./execred.sh", str(sim_round), "1", "1"])
-		if os.path.exists("dap_pos.txt"):
+		print("Round " + str(sim_round))
+		call(["./execsim.sh", str(sim_round), "10", "0", "1", "1", "none", "0"])
+		
+		fileExists= os.path.exists("dap_pos.txt")
+		if fileExists:
 			os.rename("dap_pos.txt", "positions/pos_" + str(pos) + ".txt")
+			print("Position " + str(pos) + "\n")	
 			pos+= 1
+		else:
+			print("Position not found.\n")
+		
 		sim_round += 1
 
 

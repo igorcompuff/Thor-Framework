@@ -264,6 +264,8 @@ public:
 protected:
 
   virtual void DoDispose (void);
+
+  Ptr<Node> GetMyNode ();
   /**
    * This function will notify other components connected to the node that a new stack member is now connected
    * This will be used to notify Layer 3 protocol of layer 4 protocol stack to connect them together.

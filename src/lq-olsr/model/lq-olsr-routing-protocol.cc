@@ -854,6 +854,31 @@ RoutingProtocol::AddInterfaceAssociationsToRoutingTable()
     }
 }
 
+Ipv4Address
+RoutingProtocol::GetBestHnaGateway()
+{
+  Ipv4Address gwAddress = Ipv4Address::GetBroadcast();
+  float bestCost = m_metric->GetInfinityCostValue();
+
+  const AssociationSet &associationSet = m_state.GetAssociationSet ();
+
+  for (AssociationSet::const_iterator it = associationSet.begin (); it != associationSet.end (); it++)
+    {
+      AssociationTuple const &tuple = *it;
+
+      RoutingTableEntry gatewayEntry;
+
+      if (Lookup(tuple.gatewayAddr, gatewayEntry) && m_metric->CompareBest(gatewayEntry.cost, bestCost) > 0)
+	{
+	  gwAddress = tuple.gatewayAddr;
+	  bestCost = gatewayEntry.cost;
+	}
+    }
+
+  return gwAddress;
+}
+
+
 void
 RoutingProtocol::CalculateHNARoutingTable()
 {
@@ -2476,7 +2501,7 @@ RoutingProtocol::AssociationTupleTimerExpire (Ipv4Address gatewayAddr, Ipv4Addre
   if (tuple->expirationTime < Simulator::Now ())
     {
       RemoveAssociationTuple (*tuple);
-      NS_LOG_DEBUG("DAP Expired");
+      //NS_LOG_DEBUG("DAP " << gatewayAddr << " Expired");
     }
   else
     {

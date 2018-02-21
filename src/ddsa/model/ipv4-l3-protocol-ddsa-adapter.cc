@@ -5,6 +5,8 @@
 #include "ns3/ipv4-routing-helper.h"
 #include "ddsa-routing-protocol-adapter.h"
 #include "ns3/simple-header.h"
+#include "ns3/udp-header.h"
+#include "ns3/tcp-header.h"
 
 namespace ns3 {
 
@@ -20,10 +22,7 @@ namespace ns3 {
       static TypeId tid = TypeId ("ns3::ddsa::Ipv4L3ProtocolDdsaAdapter")
         .SetParent<Ipv4L3Protocol> ()
         .SetGroupName ("Ddsa")
-        .AddConstructor<Ipv4L3ProtocolDdsaAdapter> ()
-	.AddTraceSource ("DapSelection", "Calleds when a new dap is selected",
-	                 MakeTraceSourceAccessor (&Ipv4L3ProtocolDdsaAdapter::m_dapSelectionTrace),
-	                 "ns3::ddsa::Ipv4L3ProtocolDdsaAdapter::SelectedTracedCallback");
+        .AddConstructor<Ipv4L3ProtocolDdsaAdapter> ();
       return tid;
     }
 
@@ -47,6 +46,34 @@ namespace ns3 {
     {
       if (!mustFail)
 	{
+	  Ipv4Header ipHeader;
+	  UdpHeader udpHeader;
+	  ami::AmiHeader amiHeader;
+
+	  Ptr<Packet> cPacket = p->Copy();
+
+	  cPacket->RemoveHeader(ipHeader);
+
+	  if (ipHeader.GetPayloadSize () < p->GetSize ())
+	    {
+	      cPacket->RemoveAtEnd (cPacket->GetSize () - ipHeader.GetPayloadSize ());
+	    }
+
+	  cPacket->RemoveHeader(udpHeader);
+	  cPacket->RemoveHeader(amiHeader);
+
+	  NS_LOG_DEBUG("Reading info " << amiHeader.GetReadingInfo());
+
+	  if (amiHeader.GetReadingInfo() == 1)
+	    {
+	      Ptr<Node> receivingNode = device->GetNode();
+	      Ptr<Ipv4> ipv4 = receivingNode->GetObject<Ipv4> ();
+
+	      int32_t interface = ipv4->GetInterfaceForDevice(device);
+
+	      NS_LOG_DEBUG("Packet " << amiHeader.GetPacketSequenceNumber() << " from " << ipHeader.GetSource() << " destined to " << ipHeader.GetDestination() << " Received by " << ipv4->GetAddress(interface, 0).GetLocal() << " at " << Simulator::Now().GetSeconds());
+	    }
+
 	  Ipv4L3Protocol::Receive(device, p, protocol, from, to, packetType);
 	}
       else
@@ -59,70 +86,13 @@ namespace ns3 {
     Ipv4L3ProtocolDdsaAdapter::Send (Ptr<Packet> packet, Ipv4Address source, Ipv4Address destination, uint8_t protocol,
 				     Ptr<Ipv4Route> route)
     {
-      ami::AmiHeader amiHeader;
-
-
       if (mustFail)
 	{
-	  NS_LOG_DEBUG("Sending: Node is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
+	  NS_LOG_DEBUG("Sending: Node " << source << " is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
 	  return;
 	}
 
-      Ptr<Ipv4RoutingProtocol> ipRoutingProt = GetRoutingProtocol();
-      Ptr<DdsaRoutingProtocolAdapter> ddsaRoutingProt = Ipv4RoutingHelper::GetRouting<DdsaRoutingProtocolAdapter>(ipRoutingProt);
-
-      if (!ddsaRoutingProt)
-	{
-	  return;
-	}
-
-
-
-      bool nodeIsMeter = m_type == NodeType::METER;
-      bool routeGwExists = route && route->GetGateway () != Ipv4Address ();
-      bool l3Protocol = protocol == 6 || protocol == 17;
-
-      bool shouldDdsaProcess = nodeIsMeter && routeGwExists && l3Protocol;
-
-      if (shouldDdsaProcess)
-	{
-	  Ptr<Ipv4RoutingProtocol> ipRoutingProt = GetRoutingProtocol();
-
-	  if (ipRoutingProt == NULL)
-	    {
-	      return;
-	    }
-
-	  Ptr<DdsaRoutingProtocolAdapter> ddsaRoutingProt = Ipv4RoutingHelper::GetRouting<DdsaRoutingProtocolAdapter>(ipRoutingProt);
-
-	  if (!ddsaRoutingProt)
-	    {
-	      return;
-	    }
-
-	  int retransmissions = ddsaRoutingProt->GetNRetransmissions();
-
-	  do
-	    {
-	      Dap selectedDap = ddsaRoutingProt->SelectDap();
-
-	      if (selectedDap.address == Ipv4Address::GetBroadcast())
-	      {
-		  NS_LOG_DEBUG("[" << source << "] No Daps Available at " << Simulator::Now().GetSeconds() << " s");
-		  continue;
-	      }
-	      m_dapSelectionTrace(selectedDap.address, packet->Copy());
-
-	      Socket::SocketErrno sockerr;
-	      Ptr<Ipv4Route> routeToDap = ddsaRoutingProt->RouteOutput(packet, selectedDap.address, 0, sockerr);
-	      Ipv4L3Protocol::Send(packet, source, selectedDap.address, protocol, routeToDap);
-	    }
-	    while(retransmissions-- > 0);
-	}
-      else
-	{
-	  Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
-	}
+      Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
     }
 
     void

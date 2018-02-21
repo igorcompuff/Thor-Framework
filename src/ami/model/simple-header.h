@@ -30,19 +30,14 @@
 namespace ns3 {
 namespace ami {
 
-  enum ReadingType
-    {
-      POWER_COMSUMPTION = 1,
-    };
-
   /**
     \verbatim
       0                   1                   2                   3
       0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |         Sequence Number       |         Reading Type          |
+     |         Sequence Number       |            Meter ID	     |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |                             Reading                           |                                   |
+     |                             Reading                           |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
     \endverbatim
@@ -53,14 +48,14 @@ namespace ami {
     AmiHeader ();
     virtual ~AmiHeader ();
 
-    void SetReadingType (ReadingType type)
+    void SetNodeId (uint16_t id)
     {
-      m_readingType = type;
+      m_nodeId = id;
     }
 
-    ReadingType GetReadingType () const
+    uint16_t GetNodeId () const
     {
-      return m_readingType;
+      return m_nodeId;
     }
 
     void SetReadingInfo(uint32_t info)
@@ -93,7 +88,7 @@ namespace ami {
 
   private:
     uint16_t m_packetSequenceNumber;  //!< The packet sequence number.
-    ReadingType m_readingType;
+    uint16_t m_nodeId;
     uint32_t m_readingInfo;
 
   public:

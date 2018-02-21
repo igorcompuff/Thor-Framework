@@ -36,7 +36,7 @@ NS_LOG_COMPONENT_DEFINE ("DdsaInternetStackHelper");
 DdsaInternetStackHelper::DdsaInternetStackHelper (): InternetStackHelper()
 
 {
-  nodeType = ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType::METER;
+  nodeType = ddsa::DdsaRoutingProtocolAdapter::NodeType::METER;
 }
 
 DdsaInternetStackHelper::~DdsaInternetStackHelper ()
@@ -57,7 +57,7 @@ DdsaInternetStackHelper::operator = (const DdsaInternetStackHelper &o)
 }
 
 void
-DdsaInternetStackHelper::SetNodeType(ddsa::Ipv4L3ProtocolDdsaAdapter::NodeType nt)
+DdsaInternetStackHelper::SetNodeType(ddsa::DdsaRoutingProtocolAdapter::NodeType nt)
 {
   nodeType = nt;
 }
@@ -69,10 +69,15 @@ DdsaInternetStackHelper::InstallIpv4Protocols (Ptr<Node> node) const
   CreateAndAggregateObjectFromTypeId (node, "ns3::ArpL3Protocol");
   CreateAndAggregateObjectFromTypeId (node, "ns3::ddsa::Ipv4L3ProtocolDdsaAdapter");
   CreateAndAggregateObjectFromTypeId (node, "ns3::Icmpv4L4Protocol");
+}
 
-  Ptr<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter> ipv4L3 = node->GetObject<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter>();
-  NS_ASSERT (ipv4L3);
-  ipv4L3->SetNodeType(nodeType);
+void
+DdsaInternetStackHelper::InstallIpv4Routing(Ptr<Node> node) const
+{
+  InternetStackHelper::InstallIpv4Routing(node);
+
+  Ptr<ns3::ddsa::DdsaRoutingProtocolAdapter> rp = node->GetObject<ns3::ddsa::DdsaRoutingProtocolAdapter>();
+  rp->SetNodeType(nodeType);
 }
 
 } // namespace ns3

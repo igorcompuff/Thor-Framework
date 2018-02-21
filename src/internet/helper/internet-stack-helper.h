@@ -242,6 +242,8 @@ protected:
    */
   static void CreateAndAggregateObjectFromTypeId (Ptr<Node> node, const std::string typeId);
 
+  virtual void InstallIpv4Routing (Ptr<Node> node) const;
+
 private:
   /**
    * @brief Enable pcap output the indicated Ipv4 and interface pair.
@@ -306,7 +308,6 @@ private:
   virtual void InstallIpCommonProtocols (Ptr<Node> node) const;
   virtual void ConfigureIpv4ArpJitter (Ptr<Node> node) const;
   virtual void ConfigureIpv6ArpJitter (Ptr<Node> node) const;
-  virtual void InstallIpv4Routing (Ptr<Node> node) const;
   virtual void InstallIpv6Routing (Ptr<Node> node) const;
   virtual void InstallIpv4Stack(Ptr<Node> node) const;
   virtual void InstallIpv6Stack(Ptr<Node> node) const;

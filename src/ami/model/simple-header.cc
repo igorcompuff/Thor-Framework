@@ -35,7 +35,6 @@ namespace ami {
 
   AmiHeader::AmiHeader ()
   {
-    m_readingType = ReadingType::POWER_COMSUMPTION;
     m_packetSequenceNumber = 0;
     m_readingInfo = 0;
   }
@@ -78,7 +77,7 @@ namespace ami {
   {
     Buffer::Iterator i = start;
     i.WriteHtonU16 (m_packetSequenceNumber);
-    i.WriteHtonU16 (m_readingType);
+    i.WriteHtonU16 (m_nodeId);
     i.WriteHtonU32 (m_readingInfo);
   }
 
@@ -87,7 +86,7 @@ namespace ami {
   {
     Buffer::Iterator i = start;
       m_packetSequenceNumber  = i.ReadNtohU16 ();
-      m_readingType = (ReadingType)i.ReadNtohU16 ();
+      m_nodeId = i.ReadNtohU16 ();
       m_readingInfo = i.ReadNtohU32 ();
       return GetSerializedSize ();
   }
