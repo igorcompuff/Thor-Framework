@@ -12,9 +12,9 @@ namespace ns3 {
     {
       public:
 
-      enum NodeType
+      enum FailureType
           {
-            METER, DAP, NON_DDSA
+            FULL, MALICIOUS
           };
 
 	/**
@@ -31,11 +31,13 @@ namespace ns3 {
 	virtual void Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t protocol, const Address &from,
 	                 const Address &to, NetDevice::PacketType packetType);
 	void MakeFail();
-	void SetNodeType(NodeType nType);
+	void SetFailureType(FailureType fType);
 
       private:
+	bool ShouldFailMalicious(Ptr<Packet> packet, bool receiveMethod);
+
 	bool mustFail;
-	NodeType m_type;
+	FailureType m_failureType;
     };
 
   }

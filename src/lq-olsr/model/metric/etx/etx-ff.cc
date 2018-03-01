@@ -104,10 +104,33 @@ Etx::NotifyMessageReceived(uint16_t packetSeqNumber,
 
   if (created)
     {
-      m_events.Track (Simulator::Schedule (DELAY (etx_metric_interval + Simulator::Now()), &Etx::Compute, this, info));
+      info->computationEventId = Simulator::Schedule (DELAY (etx_metric_interval + Simulator::Now()), &Etx::Compute, this, info);
     }
 
   LogInfo(info);
+}
+
+void
+Etx::NotifyLinkExpired(const Ipv4Address & neighborAddress)
+{
+  std::map<Ipv4Address, EtxInfo>::iterator it = m_links_info.find(neighborAddress);
+
+  if (it != m_links_info.end())
+    {
+      NS_LOG_DEBUG("Erasing metric info for neighbor " << neighborAddress);
+
+      if (it->second.computationEventId.IsRunning())
+        {
+	  it->second.computationEventId.Cancel();
+        }
+
+      if (it->second.timeoutEvtId.IsRunning())
+        {
+	  it->second.timeoutEvtId.Cancel();
+        }
+
+      m_links_info.erase(it);
+    }
 }
 
 void
@@ -215,6 +238,8 @@ Etx::LogInfo(EtxInfo * info)
 void
 Etx::Compute(EtxInfo * info)
 {
+
+
   NS_LOG_DEBUG("Computing ETX at " << Simulator::Now().GetSeconds() << "s.");
 
   int sum_received = info->metricReceivedLifo.Sum();
@@ -296,7 +321,7 @@ Etx::Compute(EtxInfo * info)
   NS_LOG_DEBUG(msg);
 
   Time nextSched = Simulator::Now() +  etx_metric_interval;
-  m_events.Track (Simulator::Schedule (DELAY (nextSched), &Etx::Compute, this, info));
+  info->computationEventId = Simulator::Schedule (DELAY (nextSched), &Etx::Compute, this, info);
 
 }
 

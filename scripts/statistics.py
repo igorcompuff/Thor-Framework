@@ -193,6 +193,6 @@ def statisticsForRedundancyComp(baseDir, redMin, redMax):
                 saveStatisticsForRedundancyComp(statFile, stat)
 		
 
-statisticsForRedundancyComp("/home/igor/github/ns-3.26/redundancytest/results", 1, 10)
-statisticsForModeComparison("/home/igor/github/ns-3.26/topologies/results_failure", 3)
-#statisticsForModeComparison("/home/igor/github/ns-3.26/topologies/results", 3)
+#statisticsForRedundancyComp("/home/igor/github/ns-3.26/redundancytest/results", 1, 10)
+statisticsForModeComparison("/home/igor/github/ns-3.26/simulations/failurecomp/full_failure", 3)
+statisticsForModeComparison("/home/igor/github/ns-3.26/simulations/failurecomp/malicious_failure", 3)

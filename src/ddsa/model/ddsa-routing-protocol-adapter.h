@@ -4,6 +4,7 @@
 
 #include "ns3/lq-olsr-routing-protocol.h"
 #include "ns3/simulator.h"
+#include "ns3/lq-olsr-repositories.h"
 
 namespace ns3 {
 
@@ -49,9 +50,11 @@ namespace ns3 {
 	Ipv4Address GetControllerAddress();
 	Dap GetBestCostDap();
 	void SetNodeType(NodeType nType);
+	float GetMeanDapCost();
+	void SetMalicious(bool mal);
 
 	typedef void (* NewRouteComputedTracedCallback)
-		    (std::vector<Dap> daps);
+		    (std::vector<Dap> daps, const Ipv4Address & address);
 
 	typedef void (* SelectedTracedCallback)
 		    (const Ipv4Header & header, Ptr<Packet> packet);
@@ -63,6 +66,8 @@ namespace ns3 {
 	virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
 	virtual void CalculateProbabilities();
 	virtual bool ExcludeDaps();
+	virtual float GetCostToTcSend(lqolsr::LinkTuple *link_tuple);
+	virtual uint32_t GetHelloInfoToSendHello(Ipv4Address neiAddress);
 	void RoutingTableComputation ();
 
       private:
@@ -82,9 +87,10 @@ namespace ns3 {
 	double alpha;
 	Ptr<UniformRandomVariable> m_rnd;
 	bool dumb;
+	bool malicious;
 	Ipv4Address controllerAddress;
 
-	TracedCallback<std::vector<Dap> > m_newRouteComputedTrace;
+	TracedCallback<std::vector<Dap>, const Ipv4Address & > m_newRouteComputedTrace;
 	TracedCallback<const Ipv4Address &, Ptr<Packet> > m_dapSelectionTrace;
 	NodeType m_type;
     };

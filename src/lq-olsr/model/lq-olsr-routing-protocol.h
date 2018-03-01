@@ -121,6 +121,10 @@ public:
   virtual ~RoutingProtocol ();
 
   lqmetric::LqAbstractMetric::MetricType getMetricType();
+
+  Ptr<lqmetric::LqAbstractMetric> GetMetric();
+
+
   /**
    * \brief Set the OLSR main address to the first address on the indicated interface.
    *
@@ -256,6 +260,10 @@ protected:
 
   Ipv4Address GetMyMainAddress();
 
+  virtual float GetCostToTcSend(LinkTuple *link_tuple);
+
+  virtual uint32_t GetHelloInfoToSendHello(Ipv4Address neiAddress);
+
   /**
      * \brief Removes association tuple_ if expired. Else timer is rescheduled to expire at tuple_->time().
      *
@@ -316,6 +324,7 @@ private:
   Time m_hnaInterval;     //!< HNA messages' emission interval.
   uint8_t m_willingness;  //!<  Willingness for forwarding packets on behalf of other nodes.
   Ptr<Ipv4> m_ipv4;   //!< IPv4 object the routing is linked to.
+
 
   /**
    * \brief Clears the routing table and frees the memory assigned to each one of its entries.

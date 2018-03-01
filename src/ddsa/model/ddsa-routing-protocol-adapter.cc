@@ -11,6 +11,7 @@
 #include "ddsa-routing-protocol-adapter.h"
 #include "ns3/udp-header.h"
 #include "ns3/simple-header.h"
+#include "ns3/lq-olsr-util.h"
 
 namespace ns3 {
 
@@ -52,6 +53,7 @@ namespace ns3 {
       controllerAddress = Ipv4Address::GetBroadcast();
       dumb = false;
       m_type = NodeType::METER;
+      malicious = false;
     }
 
     DdsaRoutingProtocolAdapter::~DdsaRoutingProtocolAdapter(){}
@@ -108,7 +110,7 @@ namespace ns3 {
 	      else if (getMetricType() == lqmetric::LqAbstractMetric::MetricType::BETTER_LOWER)
 		{
 		  //If the cost is the lowest possible, the probability is set to the highest value (p = 1)
-		  it->second.probability = it->second.cost == 0 ? 0 : 1 / (it->second.cost * costSomatory);
+		  it->second.probability = it->second.cost == m_metric->GetInfinityCostValue() ? 0 : 1 / (it->second.cost * costSomatory);
 		}
 
 	      probabilitySum+= it->second.probability;
@@ -310,10 +312,12 @@ namespace ns3 {
     void
     DdsaRoutingProtocolAdapter::SendTc()
     {
-      if (m_type == NodeType::DAP)
+      if (m_type == NodeType::DAP && !malicious)
 	{
 	  return;
 	}
+
+      NS_LOG_DEBUG("Sending TC");
 
       lqolsr::RoutingProtocol::SendTc();
     }
@@ -335,11 +339,25 @@ namespace ns3 {
 	  else
 	    {
 	      NS_LOG_DEBUG("DAP " << it->second.address << " is no longer available.");
-	      it->second.cost = m_metric->GetInfinityCostValue();
-	      //it = m_gateways.erase(it);
-	      it++;
+	      //it->second.cost = m_metric->GetInfinityCostValue();
+	      it = m_gateways.erase(it);
+	      //it++;
 	    }
 	}
+    }
+
+    float
+    DdsaRoutingProtocolAdapter::GetMeanDapCost()
+    {
+      float costSum = 0;
+
+      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+	{
+	  costSum+= it->second.cost;
+	}
+
+      return costSum / m_gateways.size();
+
     }
 
     void
@@ -364,7 +382,7 @@ namespace ns3 {
       	  daps.push_back(it->second);
       	}
 
-      m_newRouteComputedTrace(daps);
+      m_newRouteComputedTrace(daps, GetMyMainAddress());
     }
 
     Ptr<Ipv4Route>
@@ -464,6 +482,33 @@ namespace ns3 {
       m_type = nType;
     }
 
+    float
+    DdsaRoutingProtocolAdapter::GetCostToTcSend(lqolsr::LinkTuple *link_tuple)
+    {
+      return malicious ? 1.0f : RoutingProtocol::GetCostToTcSend(link_tuple);
+    }
+
+    uint32_t
+    DdsaRoutingProtocolAdapter::GetHelloInfoToSendHello(Ipv4Address neiAddress)
+    {
+      uint32_t info;
+      if (malicious)
+	{
+	  info = pack754_32(1.0f);
+	}
+      else
+	{
+	  info = RoutingProtocol::GetHelloInfoToSendHello(neiAddress);
+	}
+
+      return info;
+    }
+
+    void
+    DdsaRoutingProtocolAdapter::SetMalicious(bool mal)
+    {
+      malicious = mal;
+    }
+
   }
 }
-

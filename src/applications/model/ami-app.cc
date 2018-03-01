@@ -123,7 +123,7 @@ AmiApplication::SendPacket ()
       NS_LOG_DEBUG("(" << Simulator::Now().GetSeconds() << ") Sent packet copy " << header.GetPacketSequenceNumber());
     }
 
-  m_sendEvent = Simulator::Schedule (Seconds(1), &AmiApplication::SendPacket, this);
+  m_sendEvent = Simulator::Schedule (Seconds(3), &AmiApplication::SendPacket, this);
 }
 
 int64_t
@@ -137,6 +137,3 @@ AmiApplication::AssignStreams (int64_t stream)
 
 
 }
-
-
-

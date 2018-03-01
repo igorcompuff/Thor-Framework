@@ -29,7 +29,7 @@ namespace ns3 {
     Ipv4L3ProtocolDdsaAdapter::Ipv4L3ProtocolDdsaAdapter()
     {
       mustFail = false;
-      m_type = NodeType::METER;
+      m_failureType = FailureType::FULL;
     }
 
     Ipv4L3ProtocolDdsaAdapter::~Ipv4L3ProtocolDdsaAdapter(){}
@@ -40,40 +40,71 @@ namespace ns3 {
       mustFail = true;
     }
 
+    bool
+    Ipv4L3ProtocolDdsaAdapter::ShouldFailMalicious(Ptr<Packet> packet, bool receiveMethod)
+    {
+      Ipv4Header ipHeader;
+      UdpHeader udpHeader;
+      TcpHeader tcpHeader;
+      ami::AmiHeader amiHeader;
+
+      /*
+       * Only received packets have Ip header aggregated. Sent packets hava only the application and the
+       * transport headers
+       */
+      if (receiveMethod)
+	{
+	  packet->RemoveHeader(ipHeader);
+
+	  if (ipHeader.GetPayloadSize () < packet->GetSize())
+	  {
+	    packet->RemoveAtEnd (packet->GetSize () - ipHeader.GetPayloadSize ());
+	  }
+	}
+
+      /*
+       * We only condier application packets using either TCP or UDP transport protocols
+       */
+      if (ipHeader.GetProtocol() == 17)
+	{
+	  packet->RemoveHeader(udpHeader);
+	}
+      else if (ipHeader.GetProtocol() == 6)
+	{
+	  packet->RemoveHeader(tcpHeader);
+	}
+      else
+	{
+	  return false;
+	}
+
+      packet->RemoveHeader(amiHeader);
+
+      if (amiHeader.GetReadingInfo() == 1)
+	{
+	  return true;
+	}
+
+      return false;
+    }
+
     void
     Ipv4L3ProtocolDdsaAdapter::Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t protocol, const Address &from,
 					 const Address &to, NetDevice::PacketType packetType)
     {
-      if (!mustFail)
+      bool shouldFail = false;
+
+      if (mustFail)
 	{
-	  Ipv4Header ipHeader;
-	  UdpHeader udpHeader;
-	  ami::AmiHeader amiHeader;
+	  switch(m_failureType)
+	  {
+	    case FailureType::FULL: shouldFail = true; break;
+	    case FailureType::MALICIOUS: shouldFail = ShouldFailMalicious(p->Copy(), true); break;
+	  }
+	}
 
-	  Ptr<Packet> cPacket = p->Copy();
-
-	  cPacket->RemoveHeader(ipHeader);
-
-	  if (ipHeader.GetPayloadSize () < p->GetSize ())
-	    {
-	      cPacket->RemoveAtEnd (cPacket->GetSize () - ipHeader.GetPayloadSize ());
-	    }
-
-	  cPacket->RemoveHeader(udpHeader);
-	  cPacket->RemoveHeader(amiHeader);
-
-	  NS_LOG_DEBUG("Reading info " << amiHeader.GetReadingInfo());
-
-	  if (amiHeader.GetReadingInfo() == 1)
-	    {
-	      Ptr<Node> receivingNode = device->GetNode();
-	      Ptr<Ipv4> ipv4 = receivingNode->GetObject<Ipv4> ();
-
-	      int32_t interface = ipv4->GetInterfaceForDevice(device);
-
-	      NS_LOG_DEBUG("Packet " << amiHeader.GetPacketSequenceNumber() << " from " << ipHeader.GetSource() << " destined to " << ipHeader.GetDestination() << " Received by " << ipv4->GetAddress(interface, 0).GetLocal() << " at " << Simulator::Now().GetSeconds());
-	    }
-
+      if (!shouldFail)
+	{
 	  Ipv4L3Protocol::Receive(device, p, protocol, from, to, packetType);
 	}
       else
@@ -86,21 +117,31 @@ namespace ns3 {
     Ipv4L3ProtocolDdsaAdapter::Send (Ptr<Packet> packet, Ipv4Address source, Ipv4Address destination, uint8_t protocol,
 				     Ptr<Ipv4Route> route)
     {
+      bool shouldFail = false;
       if (mustFail)
 	{
-	  NS_LOG_DEBUG("Sending: Node " << source << " is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
-	  return;
+	  switch(m_failureType)
+	  {
+	    case FailureType::FULL: shouldFail = true; break;
+	    case FailureType::MALICIOUS: shouldFail = ShouldFailMalicious(packet->Copy(), false); break;
+	  }
 	}
 
-      Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
+      if (!shouldFail)
+	{
+	  Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
+	}
+      else
+	{
+	  NS_LOG_DEBUG("Sending: Node " << source << " is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
+	}
     }
 
     void
-    Ipv4L3ProtocolDdsaAdapter::SetNodeType(NodeType nType)
+    Ipv4L3ProtocolDdsaAdapter::SetFailureType(FailureType fType)
     {
-      m_type = nType;
+      m_failureType = fType;
     }
 
   }
 }
-

@@ -58,6 +58,7 @@ namespace lqmetric {
       int metricLostHellos;
       float metricValue;
       EventId timeoutEvtId;
+      EventId computationEventId;
       Ipv4Address senderAddress;
       Ipv4Address receiverAddress;
     };

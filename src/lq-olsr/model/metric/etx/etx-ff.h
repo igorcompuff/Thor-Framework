@@ -77,6 +77,8 @@ class Etx: public LqAbstractMetric
 		                       const Ipv4Address &receiverIface,
 		                       const Ipv4Address &senderIface);
 
+    virtual void NotifyLinkExpired(const Ipv4Address & neighborAddress);
+
 
     /*
      * Compares two costs regarding the quality of link/path. Some metrics give higher

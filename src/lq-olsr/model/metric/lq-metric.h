@@ -78,6 +78,8 @@ public:
 		                       const Ipv4Address &senderIface) = 0;
 
 
+    virtual void NotifyLinkExpired(const Ipv4Address & neighborAddress) = 0;
+
     /*
      * Compares two costs regarding the quality of link/path. Some metrics give higher
      * values to higher quality links, while other metrics give higher values to lower

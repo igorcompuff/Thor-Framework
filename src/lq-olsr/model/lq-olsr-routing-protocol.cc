@@ -246,7 +246,9 @@ RoutingProtocol::PrintRoutingTable (Ptr<OutputStreamWrapper> stream) const
 {
   std::ostream* os = stream->GetStream ();
 
-  *os << "Node: " << m_ipv4->GetObject<Node> ()->GetId ()
+  uint32_t myNodeId = m_ipv4->GetObject<Node> ()->GetId ();
+
+  *os << "Node: " << myNodeId
       << ", Time: " << Now ().As (Time::S)
       << ", Local time: " << GetObject<Node> ()->GetLocalTime ().As (Time::S)
       << ", OLSR Routing table" << std::endl;
@@ -383,6 +385,12 @@ RoutingProtocol::getMetricType()
   return lqmetric::LqAbstractMetric::MetricType::NOT_DEF;
 }
 
+Ptr<lqmetric::LqAbstractMetric>
+RoutingProtocol::GetMetric()
+{
+  return m_metric;
+}
+
 void RoutingProtocol::SetMainInterface (uint32_t interface)
 {
   m_mainAddress = m_ipv4->GetAddress (interface, 0).GetLocal ();
@@ -423,7 +431,8 @@ RoutingProtocol::ExtractCorrectMessagesFromPacket(Ptr<Packet> packet, const lqol
      NS_LOG_DEBUG ("Olsr Msg received with type "
 		   << std::dec << int (messageHeader.GetMessageType ())
 		   << " TTL=" << int (messageHeader.GetTimeToLive ())
-		   << " origAddr=" << messageHeader.GetOriginatorAddress ());
+		   << " origAddr=" << messageHeader.GetOriginatorAddress ()
+		   << " Seq Number = " << messageHeader.GetMessageSequenceNumber());
 
      messages.push_back (messageHeader);
    }
@@ -553,11 +562,10 @@ RoutingProtocol::RecvOlsr (Ptr<Socket> socket)
   NS_ASSERT (receiverIfaceAddr != Ipv4Address ());
   NS_ASSERT (inetSourceAddr.GetPort () == OLSR_PORT_NUMBER);
 
-  NS_LOG_DEBUG ("OLSR node " << m_mainAddress << " received a OLSR packet from " << senderIfaceAddr << " to " << receiverIfaceAddr);
-
   lqolsr::PacketHeader olsrPacketHeader;
   receivedPacket->RemoveHeader (olsrPacketHeader);
 
+  NS_LOG_DEBUG ("OLSR node " << m_mainAddress << " received a OLSR packet from " << senderIfaceAddr << " to " << receiverIfaceAddr);
   MessageList messages = ExtractCorrectMessagesFromPacket(receivedPacket, olsrPacketHeader);
 
   ProcessMessage(messages, senderIfaceAddr, receiverIfaceAddr, inetSourceAddr);
@@ -584,7 +592,7 @@ RoutingProtocol::HasLinkTo(const Ipv4Address & neighbor)
   return false;
 }
 
-//This Mpr implementation simply enable all symetric neighbors as Mpr
+//This Mpr implementation simply enables all symetric neighbors as Mpr
 void
 RoutingProtocol::MprComputation ()
 {
@@ -757,11 +765,13 @@ RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple & dest)
 void
 RoutingProtocol::RoutingTableComputation ()
 {
-  NS_LOG_DEBUG ("Routing Table Computaion at time " << Simulator::Now ().GetSeconds () << " in node " << m_mainAddress);
+  double now = Simulator::Now ().GetSeconds ();
+
+  NS_LOG_DEBUG ("Routing Table Computaion at time " << now << " in node " << m_mainAddress);
 
   Clear();
 
-  Time now = Simulator::Now ();
+  //Time now = Simulator::Now ();
 
   InitializeDestinations();
 
@@ -944,6 +954,7 @@ RoutingProtocol::CalculateHNARoutingTable()
 
 	  if (gatewayEntryExists && m_metric->CompareBest(gatewayEntry.cost, gwRouteCost) > 0)
 	    {
+	      NS_LOG_DEBUG("Removing hna entry because new one's cost (" << gatewayEntry.cost << ") is lower than the old one (" << gwRouteCost << ")");
 	      m_hnaRoutingTable->RemoveRoute (routeIndex);
 	      addRoute = true;
 	    }
@@ -952,6 +963,7 @@ RoutingProtocol::CalculateHNARoutingTable()
       if (addRoute && gatewayEntryExists)
 	{
 	  uint32_t cost = pack754_32(gatewayEntry.cost);
+	  NS_LOG_DEBUG("Hna entry added: dest = " << tuple.networkAddr << ", net mask = " << tuple.netmask << ", gw = " << tuple.gatewayAddr << ", next hop = " << gatewayEntry.nextAddr);
 	  m_hnaRoutingTable->AddNetworkRouteTo (tuple.networkAddr,
 						tuple.netmask,
 						gatewayEntry.nextAddr,
@@ -1458,6 +1470,12 @@ RoutingProtocol::GetLinkCode(const LinkTuple & link_tuple, Time now)
   return (link_type & 0x03) | ((nb_type << 2) & 0x0f);
 }
 
+uint32_t
+RoutingProtocol::GetHelloInfoToSendHello(Ipv4Address neiAddress)
+{
+  return m_metric->GetHelloInfo(neiAddress);
+}
+
 void
 RoutingProtocol::SendHello ()
 {
@@ -1490,7 +1508,7 @@ RoutingProtocol::SendHello ()
 
       lqolsr::MessageHeader::NeighborInterfaceInfo neigh_info;
       neigh_info.neighborInterfaceAddress = link_tuple->neighborIfaceAddr;
-      neigh_info.metricInfo = m_metric->GetHelloInfo(link_tuple->neighborIfaceAddr);
+      neigh_info.metricInfo = GetHelloInfoToSendHello(link_tuple->neighborIfaceAddr);
 
       linkMessage.neighborInterfaceInformation.push_back(neigh_info);
 
@@ -1517,6 +1535,23 @@ RoutingProtocol::SendHello ()
     QueueMessage (msg, JITTER);
 }
 
+float
+RoutingProtocol::GetCostToTcSend(LinkTuple *link_tuple)
+{
+  RoutingTableEntry outEntry;
+  float cost;
+  if(Lookup (link_tuple->neighborIfaceAddr, outEntry))
+    {
+      cost = outEntry.cost;
+    }
+  else
+    {
+      cost = m_metric->GetCost(link_tuple->neighborIfaceAddr);
+    }
+
+  return cost;
+}
+
 void
 RoutingProtocol::SendTc ()
 {
@@ -1526,6 +1561,8 @@ RoutingProtocol::SendTc ()
 
   lqolsr::MessageHeader::LqTc &lqtc = msg.GetLqTc ();
   lqtc.ansn = m_ansn;
+
+  NS_LOG_DEBUG("Sending TC. Seq Number = " << msg.GetMessageSequenceNumber());
 
   for (MprSelectorSet::const_iterator mprsel_tuple = m_state.GetMprSelectors ().begin ();
        mprsel_tuple != m_state.GetMprSelectors ().end (); mprsel_tuple++)
@@ -1537,20 +1574,11 @@ RoutingProtocol::SendTc ()
 
       if (link_tuple != NULL)
 	{
-	  RoutingTableEntry outEntry;
-	  float cost;
-	  if(Lookup (link_tuple->neighborIfaceAddr, outEntry))
-	    {
-	      cost = outEntry.cost;
-	    }
-	  else
-	    {
-	      cost = m_metric->GetCost(link_tuple->neighborIfaceAddr);
-	    }
-
+	  float cost = GetCostToTcSend(link_tuple);
 
 	  neigh_info.metricInfo = pack754_32(cost);//link_tuple->cost);
 	  lqtc.neighborAddresses.push_back (neigh_info);
+	  NS_LOG_DEBUG("Neighbor " << neigh_info.neighborInterfaceAddress << " Cost = " << cost);
 	}
     }
     QueueMessage (msg, JITTER);
@@ -2385,6 +2413,7 @@ RoutingProtocol::LinkTupleTimerExpire (Ipv4Address neighborIfaceAddr)
     {
       NS_LOG_DEBUG("Neighbor Expired: " << neighborIfaceAddr);
       RemoveLinkTuple (*tuple);
+      m_metric->NotifyLinkExpired(neighborIfaceAddr);
     }
   else if (tuple->symTime < now)
     {
