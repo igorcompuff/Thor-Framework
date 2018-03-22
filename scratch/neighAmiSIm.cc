@@ -33,7 +33,7 @@ using namespace ns3::lqolsr;
 using namespace ns3::ddsa;
 using namespace ns3::ami;
 
-NS_LOG_COMPONENT_DEFINE ("amigrid");
+NS_LOG_COMPONENT_DEFINE ("NeighborhoodAmiSim");
 
 
 struct LatencyInfo
@@ -125,24 +125,25 @@ struct AmiPacketInfo
 
 
 /*
- * AmiGridSim.cpp
+ * NeighborhoodAmiSim.cpp
  *
  *  Created on: 13 de jun de 2017
  *      Author: igor
  */
 
-class AmiGridSim
+class NeighborhoodAmiSim
 {
   public:
-    AmiGridSim ();
-    virtual
-    ~AmiGridSim ();
+	NeighborhoodAmiSim ();
+    virtual ~NeighborhoodAmiSim ();
     void Configure(int argc, char *argv[]);
-    Ptr<ListPositionAllocator> CreateMetersPosition();
-    std::vector<Vector> GetDapPositions();
-    Ptr<ListPositionAllocator> CreateDapsPosition(std::vector<Vector> positions);
-    Ptr<ListPositionAllocator> CreateControllerPosition();
-    void InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<ListPositionAllocator> dapsPosition, Ptr<ListPositionAllocator> controllerPosition);
+
+    //Topologia
+
+    void CreateTopology();
+
+
+
     void ConfigureWifi();
     void CreateControllerLan();
     void ConfigureIpAddressing();
@@ -161,24 +162,16 @@ class AmiGridSim
     void ExecuteFailure();
     void GenerateDapStatistics();
     void GenerateControllerReceptionStatistics();
-    void SaveDapsCurrentPosition();
-    bool ComplyWithMinRedundancy();
-    Ptr<ListPositionAllocator> CreateRandomDapsPosition();
-
-    int GetRedundancy()
-    {
-      return redundancy;
-    }
 
     bool IsDdsaEnabled()
     {
       return ddsaEnabled;
     }
 
-    std::string GetTopologyFile()
-    {
-      return topologyFile;
-    }
+    const double BEST_LINK = 112;//50.0;
+    const double GOOD_LINK = 112;//90.0;
+    const double BAD_LINK = 114.02;
+    const double NO_LINK = 200.0;
 
   private:
     void Parse(int argc, char *argv[]);
@@ -189,10 +182,18 @@ class AmiGridSim
     void ConfigureControllerStack();
     void ConfigureDapsHna();
 
+    void
+	AddNeighborhood(Ptr<ListPositionAllocator> meterPositionAlloc, int startX, int startY);
+    void ConfigureIntraNeighborhoodLinks(NodeContainer neighborhood);
+    void ConfigureNeighborhoodToDapLinks(NodeContainer neighborhood, int neighborhoodIndex);
+    void ConfigureHorizontalInterNeighborhoodLinks(NodeContainer neighborhoodSrc, NodeContainer neighborhoodDest);
+    void ConfigureVerticalInterNeighborhoodLinks(NodeContainer neighborhoodSrc, NodeContainer neighborhoodDest);
+
     void ApplicationPacketSent(Ptr<const Packet>);
     void ControllerReceivePacket (Ptr<Socket> socket);
     void SendPacketToController(Ptr<Packet> packet, Ptr<Node> node);
 
+    void NeighborExpired(Ipv4Address neighborAddress);
     void DdsaDapReceivedPacket (Ptr<Socket> socket);
     void SenderRouteUpdated(std::vector<ddsa::Dap> daps, const Ipv4Address & address);
     double CalculateDapSelection(const Ipv4Address & dapAddress);
@@ -202,14 +203,10 @@ class AmiGridSim
     Ipv4Address GetNodeAddress(const Ptr<NetDevice> & device, const Ptr<Node> node);
     void DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<Packet> packet);
     void UpdateDapSelectionHistory(const Ipv4Address & address, uint16_t seqNumber);
-    double GetCoordinate(std::stringstream * coordStream);
-    Vector GetVector(std::string xStr, std::string yStr);
     double CalculateMeanCost(const Ipv4Address & dapAddress);
     double CalculateMeanLatency();
     double CalculateMeanProbability(const Ipv4Address & dapAddress);
     Ipv4Address GetIpAddressForOlsrNode(Ptr<Node> node);
-    //Ptr<NetDevice> GetOlsrDeviceForNode(Ptr<Node> node);
-    std::vector<Vector> GetPreviousRedundancyDapsPositions();
     Ptr<NetDevice> GetDeviceForNode(Ptr<Node> node, NetDeviceContainer devices);
     Ipv4Address GetIpAddressForNode(Ptr<Node> node, Ptr<NetDevice> device);
     Ipv4Address GetIpAddressForCsmaNode(Ptr<Node> node);
@@ -217,11 +214,6 @@ class AmiGridSim
     void ParseSenders();
 
     std::string phyMode;
-    uint32_t packetSize; // bytes
-    uint32_t totalDaps; //Total number of Daps
-    bool verbose;
-    bool assocMethod1;
-    bool assocMethod2;
     bool withFailure;
     int failureMode;
     bool ddsaEnabled;
@@ -229,14 +221,9 @@ class AmiGridSim
     NodeContainer daps;
     NodeContainer meters;
     NodeContainer controllers;
-    double gridXShift; // Horizontal distance between two meters in the grid
-    double gridYShift; // Vertical distance between two meters in the grid
-    int gridColumns;
-    int gridRows;
-    uint32_t senderNodeIndex;
     std::string senderIndexes;
     std::vector<int> senderIndexList;
-    Ptr<LogDistancePropagationLossModel> myLossModel;
+    Ptr<MatrixPropagationLossModel> myLossModel;
     YansWifiPhyHelper myWifiPhy;
     Ipv4InterfaceContainer olsrIpv4Devices;
     Ipv4InterfaceContainer csmaIpv4Devices;
@@ -245,72 +232,49 @@ class AmiGridSim
     NetDeviceContainer csmaDevices;
 
     //Statistics
+    int totalDaps;
+    int totalMeters;
+    int totalControllers;
     int totalSentCopies;
-
     std::map<uint16_t, std::map<uint16_t, AmiPacketInfo> > packetsSent;
-
     std::map<Ipv4Address, std::vector<AmiPacketInfo> > dapSelectionHistory;
     std::map<Ipv4Address, std::vector<Dap> > costHistory;
     int ddsa_retrans;
-    int redundancy;
     bool dumb;
-    std::string topologyFile;
     Time failureTime;
     Ptr<UniformRandomVariable> m_rnd;
 };
 
-AmiGridSim::AmiGridSim (): phyMode ("DsssRate1Mbps")
+NeighborhoodAmiSim::NeighborhoodAmiSim (): phyMode ("DsssRate1Mbps")
 {
-    packetSize = 400;
-    totalDaps = 3;
-    verbose = false;
-    assocMethod1 = false;
-    assocMethod2 = true;
-    gridXShift = 10.0;
-    gridYShift = 20.0;
-    gridColumns = 3;//12;
-    gridRows = 1;//3;
-    myLossModel = CreateObject<LogDistancePropagationLossModel> ();
+	totalDaps = 6;
+	totalMeters = 36;
+	totalControllers = 1;
     myWifiPhy = YansWifiPhyHelper::Default();
-    senderNodeIndex = 3;
     withFailure = false;
     ddsaEnabled = true;
     totalSentCopies = 0;
     ddsa_retrans = 0;
-    redundancy = 0;
     dumb = false;
     m_rnd = CreateObject<UniformRandomVariable>();
-    topologyFile = "";
     failureMode = 0; //Full failure
+
+    myLossModel = CreateObject<MatrixPropagationLossModel> ();
 }
 
-AmiGridSim::~AmiGridSim ()
+NeighborhoodAmiSim::~NeighborhoodAmiSim ()
 {
   // TODO Auto-generated destructor stub
 }
 
-
 void
-AmiGridSim::Parse(int argc, char *argv[])
+NeighborhoodAmiSim::Parse(int argc, char *argv[])
 {
-  cmd.AddValue ("phyMode", "Wifi Phy mode", phyMode);
-  cmd.AddValue ("packetSize", "size of application packet sent", packetSize);
-  cmd.AddValue ("daps", "Total number of Daps", totalDaps);
-  cmd.AddValue ("gridXShift", "Horizontal distance between two meters in the grid", gridXShift);
-  cmd.AddValue ("gridYShift", "Vertical distance between two meters in the grid ", gridYShift);
-  cmd.AddValue ("gridColumns", "Number of columns in the grid ", gridColumns);
-  cmd.AddValue ("gridRows", "Number of rows in the grid ", gridRows);
-  cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
-  cmd.AddValue ("assocMethod1", "Use SetRoutingTableAssociation () method", assocMethod1);
-  cmd.AddValue ("assocMethod2", "Use AddHostNetworkAssociation () method", assocMethod2);
   cmd.AddValue ("failure", "Cause the failure of one DAP", withFailure);
   cmd.AddValue ("ddsaenabled", "Enable ddsa", ddsaEnabled);
-  cmd.AddValue ("sender", "The id of the sender meter. The value must be >= 0 and less than the number of meters.", senderNodeIndex);
   cmd.AddValue ("senders", "Comma separated list of sender indexes.", senderIndexes);
   cmd.AddValue ("retrans", "Number of retransmissions", ddsa_retrans);
-  cmd.AddValue ("redundancy", "Number of retransmissions", redundancy);
   cmd.AddValue ("dumb", "Ddsa in dumb mode", dumb);
-  cmd.AddValue ("tfile", "Topology File", topologyFile);
   cmd.AddValue ("fmode", "Failure mode", failureMode);
 
   cmd.Parse (argc, argv);
@@ -319,40 +283,45 @@ AmiGridSim::Parse(int argc, char *argv[])
 //Simulation Configuration
 
 void
-AmiGridSim::ParseSenders()
+NeighborhoodAmiSim::ParseSenders()
 {
   if (senderIndexes == "*")
     {
       for(uint32_t i = 0; i < meters.GetN(); i++)
-	{
-	  senderIndexList.push_back(i);
-	}
+		{
+		  senderIndexList.push_back(i);
+		}
     }
   else
     {
-      std::string indexStr = "";
+      if (senderIndexes == "none")
+      {
+    	  return;
+      }
+
+	  std::string indexStr = "";
       for(std::string::size_type i = 0; i < senderIndexes.size(); ++i)
-	{
-          if (senderIndexes[i] == ',')
-            {
-              senderIndexList.push_back(std::stoi(indexStr));
-              indexStr = "";
-            }
-          else
-            {
-              indexStr+= senderIndexes[i];
-            }
-	}
+		{
+			  if (senderIndexes[i] == ',')
+				{
+				  senderIndexList.push_back(std::stoi(indexStr));
+				  indexStr = "";
+				}
+			  else
+				{
+				  indexStr+= senderIndexes[i];
+				}
+		}
 
       if (!indexStr.empty())
-	{
-	  senderIndexList.push_back(std::stoi(indexStr));
-	}
+		{
+		  senderIndexList.push_back(std::stoi(indexStr));
+		}
     }
 }
 
 void
-AmiGridSim::Configure(int argc, char *argv[])
+NeighborhoodAmiSim::Configure(int argc, char *argv[])
 {
   Parse(argc, argv);
 
@@ -365,168 +334,218 @@ AmiGridSim::Configure(int argc, char *argv[])
 }
 
 void
-AmiGridSim::CreateNodes()
+NeighborhoodAmiSim::CreateNodes()
 {
   daps.Create(totalDaps); // Creates the specified number of daps
-  meters.Create(gridRows * gridColumns); //Creates the Specified NUmber of meters
-  controllers.Create(1); // Creates one controller.
+  meters.Create(totalMeters); //Creates the Specified NUmber of meters
+  controllers.Create(totalControllers); // Creates one controller.
 
   ParseSenders();
 }
 
-Ptr<ListPositionAllocator>
-AmiGridSim::CreateMetersPosition()
+void
+NeighborhoodAmiSim::AddNeighborhood(Ptr<ListPositionAllocator> meterPositionAlloc, int startX, int startY)
 {
-  Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  for (int row = 0; row < gridRows; row++)
-    {
-      int y = row * gridYShift + 50;
+	for (int i = 0; i < 3; i++)
+	{
+		int y = startY + i * 10;
 
-      for (int col = 0; col < gridColumns; col++)
+		for (int j = 0; j < 3; j++)
 		{
-		  positionAlloc->Add (Vector (col * gridXShift, y, 0.0));
+			int x = startX + j * 10;
+
+			meterPositionAlloc->Add (Vector (x, y, 0.0));
 		}
-    }
-
-  return positionAlloc;
+	}
 }
 
-double
-AmiGridSim::GetCoordinate(std::stringstream * coordStream)
-{
-  std::string token;
-  std::getline(*coordStream, token, '=');
-  std::getline(*coordStream, token, '=');
-
-  return std::atof(token.substr(1).c_str());
-}
-Vector
-AmiGridSim::GetVector(std::string xStr, std::string yStr)
-{
-  std::stringstream xStream(xStr);
-  std::stringstream yStream(yStr);
-
-  double x = GetCoordinate(&xStream);
-  double y = GetCoordinate(&yStream);
-
-  return Vector(x, y, 0.0);
-
-
-}
-std::vector<Vector>
-AmiGridSim::GetDapPositions()
-{
-  std::vector<Vector> positions;
-  std::ifstream file;
-  std::string x, y, temp;
-
-  file.open(topologyFile.c_str(), std::ios::in);
-
-  while (getline(file, x))
-    {
-      getline(file, y);
-      getline(file, temp);
-      getline(file, temp);
-
-      positions.push_back(GetVector(x, y));
-    }
-
-  return positions;
-}
-Ptr<ListPositionAllocator>
-AmiGridSim::CreateDapsPosition(std::vector<Vector> positions)
-{
-  Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-
-  for(std::vector<Vector>::iterator pos = positions.begin(); pos != positions.end(); pos++)
-    {
-      positionAlloc->Add(*pos);
-    }
-
-  totalDaps = positions.size();
-
-  return positionAlloc;
-}
-
-std::vector<Vector>
-AmiGridSim::GetPreviousRedundancyDapsPositions()
-{
-  std::vector<Vector> positions;
-  std::string dap, x, y, space;
-  int previousRedundancy = redundancy - 1;
-  std::stringstream stream;
-  stream << "/home/igor/github/ns-3.26/positions/dap_pos_" << previousRedundancy << ".txt";
-  std::string path = stream.str();
-  std::ifstream file(path);
-
-  if (file)
-  {
-    getline(file, dap);
-
-    while(dap.find("#") == std::string::npos)
-    {
-      getline(file, x);
-      getline(file, y);
-      getline(file, space);
-      positions.push_back(GetVector(x, y));
-      getline(file, dap);
-    }
-  }
-
-  return positions;
-}
-
-Ptr<ListPositionAllocator>
-AmiGridSim::CreateRandomDapsPosition()
-{
-  Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-
-  double maxX = (gridColumns - 1) * gridXShift;
-  double maxY = (gridRows - 1) * gridYShift;
-
-  std::vector<Vector> previousPositions = GetPreviousRedundancyDapsPositions();
-
-  for(std::vector<Vector>::iterator it = previousPositions.begin(); it != previousPositions.end(); it++)
-    {
-      positionAlloc->Add (*it);
-    }
-
-  for (uint32_t dap = 1; dap <= totalDaps - previousPositions.size(); dap++)
-    {
-      double x = m_rnd->GetValue(0.0, maxX);
-      double y = m_rnd->GetValue(0.0, maxY);
-
-      positionAlloc->Add (Vector (x, y, 0.0));
-    }
-
-  return positionAlloc;
-}
-
-Ptr<ListPositionAllocator>
-AmiGridSim::CreateControllerPosition()
-{
-  Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
-  positionAlloc->Add (Vector (0, -30, 0.0));
-
-  return positionAlloc;
-}
 void
-AmiGridSim::InstallMobilityModel(Ptr<ListPositionAllocator> metersPosition, Ptr<ListPositionAllocator> dapsPosition, Ptr<ListPositionAllocator> controllerPosition)
+NeighborhoodAmiSim::ConfigureIntraNeighborhoodLinks(NodeContainer neighborhood)
 {
-  MobilityHelper mobility;
-  mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
 
-  mobility.SetPositionAllocator (metersPosition);
-  mobility.Install (meters);
 
-  mobility.SetPositionAllocator (dapsPosition);
-  mobility.Install (daps);
+	myLossModel->SetLoss (neighborhood.Get (0)->GetObject<MobilityModel>(), neighborhood.Get (1)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (0)->GetObject<MobilityModel>(), neighborhood.Get (3)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (0)->GetObject<MobilityModel>(), neighborhood.Get (4)->GetObject<MobilityModel>(), BEST_LINK);
 
-  mobility.SetPositionAllocator (controllerPosition);
-  mobility.Install (controllers);
+	myLossModel->SetLoss (neighborhood.Get (1)->GetObject<MobilityModel>(), neighborhood.Get (2)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (1)->GetObject<MobilityModel>(), neighborhood.Get (3)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (1)->GetObject<MobilityModel>(), neighborhood.Get (4)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (1)->GetObject<MobilityModel>(), neighborhood.Get (5)->GetObject<MobilityModel>(), BEST_LINK);
+
+	myLossModel->SetLoss (neighborhood.Get (2)->GetObject<MobilityModel>(), neighborhood.Get (4)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (2)->GetObject<MobilityModel>(), neighborhood.Get (5)->GetObject<MobilityModel>(), BEST_LINK);
+
+
+	myLossModel->SetLoss (neighborhood.Get (3)->GetObject<MobilityModel>(), neighborhood.Get (4)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (3)->GetObject<MobilityModel>(), neighborhood.Get (6)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (3)->GetObject<MobilityModel>(), neighborhood.Get (7)->GetObject<MobilityModel>(), BEST_LINK);
+
+	myLossModel->SetLoss (neighborhood.Get (4)->GetObject<MobilityModel>(), neighborhood.Get (5)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (4)->GetObject<MobilityModel>(), neighborhood.Get (6)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (4)->GetObject<MobilityModel>(), neighborhood.Get (7)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (4)->GetObject<MobilityModel>(), neighborhood.Get (8)->GetObject<MobilityModel>(), BEST_LINK);
+
+	myLossModel->SetLoss (neighborhood.Get (5)->GetObject<MobilityModel>(), neighborhood.Get (6)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (5)->GetObject<MobilityModel>(), neighborhood.Get (7)->GetObject<MobilityModel>(), BEST_LINK);
+	myLossModel->SetLoss (neighborhood.Get (5)->GetObject<MobilityModel>(), neighborhood.Get (8)->GetObject<MobilityModel>(), BEST_LINK);
+
+	myLossModel->SetLoss (neighborhood.Get (6)->GetObject<MobilityModel>(), neighborhood.Get (7)->GetObject<MobilityModel>(), BEST_LINK);
+
+	myLossModel->SetLoss (neighborhood.Get (7)->GetObject<MobilityModel>(), neighborhood.Get (8)->GetObject<MobilityModel>(), BEST_LINK);
 }
+
 void
-AmiGridSim::ConfigureWifi()
+NeighborhoodAmiSim::ConfigureHorizontalInterNeighborhoodLinks(NodeContainer neighborhoodSrc, NodeContainer neighborhoodDest)
+{
+	myLossModel->SetLoss (neighborhoodSrc.Get (2)->GetObject<MobilityModel>(), neighborhoodDest.Get (0)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhoodSrc.Get (2)->GetObject<MobilityModel>(), neighborhoodDest.Get (3)->GetObject<MobilityModel>(), BAD_LINK);
+
+	myLossModel->SetLoss (neighborhoodSrc.Get (5)->GetObject<MobilityModel>(), neighborhoodDest.Get (0)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhoodSrc.Get (5)->GetObject<MobilityModel>(), neighborhoodDest.Get (3)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhoodSrc.Get (5)->GetObject<MobilityModel>(), neighborhoodDest.Get (6)->GetObject<MobilityModel>(), BAD_LINK);
+
+	myLossModel->SetLoss (neighborhoodSrc.Get (8)->GetObject<MobilityModel>(), neighborhoodDest.Get (3)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhoodSrc.Get (8)->GetObject<MobilityModel>(), neighborhoodDest.Get (6)->GetObject<MobilityModel>(), BAD_LINK);
+}
+
+void
+NeighborhoodAmiSim::ConfigureVerticalInterNeighborhoodLinks(NodeContainer neighborhoodSrc, NodeContainer neighborhoodDest)
+{
+	myLossModel->SetLoss (neighborhoodSrc.Get (6)->GetObject<MobilityModel>(), neighborhoodDest.Get (0)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhoodSrc.Get (6)->GetObject<MobilityModel>(), neighborhoodDest.Get (1)->GetObject<MobilityModel>(), BAD_LINK);
+
+	myLossModel->SetLoss (neighborhoodSrc.Get (7)->GetObject<MobilityModel>(), neighborhoodDest.Get (0)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhoodSrc.Get (7)->GetObject<MobilityModel>(), neighborhoodDest.Get (1)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhoodSrc.Get (7)->GetObject<MobilityModel>(), neighborhoodDest.Get (2)->GetObject<MobilityModel>(), BAD_LINK);
+
+	myLossModel->SetLoss (neighborhoodSrc.Get (8)->GetObject<MobilityModel>(), neighborhoodDest.Get (1)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhoodSrc.Get (8)->GetObject<MobilityModel>(), neighborhoodDest.Get (2)->GetObject<MobilityModel>(), BAD_LINK);
+}
+
+void
+NeighborhoodAmiSim::ConfigureNeighborhoodToDapLinks(NodeContainer neighborhood, int neighborhoodIndex )
+{
+	myLossModel->SetLoss (neighborhood.Get (0)->GetObject<MobilityModel>(), daps.Get (neighborhoodIndex)->GetObject<MobilityModel>(), GOOD_LINK);
+	myLossModel->SetLoss (neighborhood.Get (1)->GetObject<MobilityModel>(), daps.Get (neighborhoodIndex)->GetObject<MobilityModel>(), GOOD_LINK);
+	myLossModel->SetLoss (neighborhood.Get (2)->GetObject<MobilityModel>(), daps.Get (neighborhoodIndex)->GetObject<MobilityModel>(), GOOD_LINK);
+	myLossModel->SetLoss (neighborhood.Get (6)->GetObject<MobilityModel>(), daps.Get (neighborhoodIndex + 2)->GetObject<MobilityModel>(), GOOD_LINK);
+	myLossModel->SetLoss (neighborhood.Get (7)->GetObject<MobilityModel>(), daps.Get (neighborhoodIndex + 2)->GetObject<MobilityModel>(), GOOD_LINK);
+	myLossModel->SetLoss (neighborhood.Get (8)->GetObject<MobilityModel>(), daps.Get (neighborhoodIndex + 2)->GetObject<MobilityModel>(), GOOD_LINK);
+}
+
+void
+NeighborhoodAmiSim::CreateTopology()
+{
+	//Creating neighborhoods
+
+	NodeContainer neighborhood1;
+	NodeContainer neighborhood2;
+	NodeContainer neighborhood3;
+	NodeContainer neighborhood4;
+
+	for (uint32_t i = 0; i < meters.GetN(); i++)
+	{
+
+		if (i < 9)
+		{
+			neighborhood1.Add(meters.Get(i));
+		}
+		else if (i < 18)
+		{
+			neighborhood2.Add(meters.Get(i));
+		}
+		else if (i < 27)
+		{
+			neighborhood3.Add(meters.Get(i));
+		}
+		else
+		{
+			neighborhood4.Add(meters.Get(i));
+		}
+	}
+
+	//Defining the positions
+
+	Ptr<ListPositionAllocator> dapPositionAlloc = CreateObject<ListPositionAllocator> ();
+	Ptr<ListPositionAllocator> meterNeigh1PositionAlloc = CreateObject<ListPositionAllocator> ();
+	Ptr<ListPositionAllocator> meterNeigh2PositionAlloc = CreateObject<ListPositionAllocator> ();
+	Ptr<ListPositionAllocator> meterNeigh3PositionAlloc = CreateObject<ListPositionAllocator> ();
+	Ptr<ListPositionAllocator> meterNeigh4PositionAlloc = CreateObject<ListPositionAllocator> ();
+
+	Ptr<ListPositionAllocator> controllerPositionAlloc = CreateObject<ListPositionAllocator> ();
+
+	controllerPositionAlloc->Add (Vector (-30, -30, 0.0));
+
+	dapPositionAlloc->Add (Vector (10, 0, 0.0));
+	dapPositionAlloc->Add (Vector (50, 0, 0.0));
+	dapPositionAlloc->Add (Vector (10, 40, 0.0));
+	dapPositionAlloc->Add (Vector (50, 40, 0.0));
+	dapPositionAlloc->Add (Vector (10, 80, 0.0));
+	dapPositionAlloc->Add (Vector (50, 80, 0.0));
+
+	AddNeighborhood(meterNeigh1PositionAlloc, 0, 10);
+	AddNeighborhood(meterNeigh2PositionAlloc, 40, 10);
+	AddNeighborhood(meterNeigh3PositionAlloc, 0, 50);
+	AddNeighborhood(meterNeigh4PositionAlloc, 40, 50);
+
+	//Installing MobilityModel
+
+	MobilityHelper mobility;
+	mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
+
+	mobility.SetPositionAllocator (meterNeigh1PositionAlloc);
+	mobility.Install (neighborhood1);
+	mobility.SetPositionAllocator (meterNeigh2PositionAlloc);
+	mobility.Install (neighborhood2);
+	mobility.SetPositionAllocator (meterNeigh3PositionAlloc);
+	mobility.Install (neighborhood3);
+	mobility.SetPositionAllocator (meterNeigh4PositionAlloc);
+	mobility.Install (neighborhood4);
+
+	mobility.SetPositionAllocator (dapPositionAlloc);
+	mobility.Install (daps);
+
+	mobility.SetPositionAllocator (controllerPositionAlloc);
+	mobility.Install (controllers);
+
+	//Installing propagation loss
+
+	myLossModel->SetDefaultLoss (NO_LINK);
+
+	//Configure intra neighborhood links
+	ConfigureIntraNeighborhoodLinks(neighborhood1);
+	ConfigureIntraNeighborhoodLinks(neighborhood2);
+	ConfigureIntraNeighborhoodLinks(neighborhood3);
+	ConfigureIntraNeighborhoodLinks(neighborhood4);
+
+	//Configure inter-neighborhood links
+
+	//Configure Horizontal Neighborhoods
+	ConfigureHorizontalInterNeighborhoodLinks(neighborhood1, neighborhood2);
+	ConfigureHorizontalInterNeighborhoodLinks(neighborhood3, neighborhood4);
+
+	//Configure Vertical Neighborhoods
+
+	ConfigureVerticalInterNeighborhoodLinks(neighborhood1, neighborhood3);
+	ConfigureVerticalInterNeighborhoodLinks(neighborhood2, neighborhood4);
+
+	//Configure Diagonal Neighborhoods
+
+	myLossModel->SetLoss (neighborhood1.Get (8)->GetObject<MobilityModel>(), neighborhood4.Get (0)->GetObject<MobilityModel>(), BAD_LINK);
+	myLossModel->SetLoss (neighborhood2.Get (6)->GetObject<MobilityModel>(), neighborhood3.Get (2)->GetObject<MobilityModel>(), BAD_LINK);
+
+
+	//Configuring links to DAPs
+
+	ConfigureNeighborhoodToDapLinks(neighborhood1, 0);
+	ConfigureNeighborhoodToDapLinks(neighborhood2, 1);
+	ConfigureNeighborhoodToDapLinks(neighborhood3, 2);
+	ConfigureNeighborhoodToDapLinks(neighborhood4, 3);
+}
+
+void
+NeighborhoodAmiSim::ConfigureWifi()
 {
   Ptr<YansWifiChannel> wifiChannel = CreateObject <YansWifiChannel> ();
   wifiChannel->SetPropagationLossModel (myLossModel);
@@ -536,10 +555,7 @@ AmiGridSim::ConfigureWifi()
   wifi.SetStandard (WIFI_PHY_STANDARD_80211b);
   wifi.SetRemoteStationManager ("ns3::ConstantRateWifiManager", "DataMode",StringValue (phyMode), "ControlMode",StringValue (phyMode));
 
-  if (verbose)
-  {
-      wifi.EnableLogComponents ();  // Turn on all Wifi logging
-  }
+  //wifi.EnableLogComponents ();  // Turn on all Wifi logging
 
   // This is one parameter that matters when using FixedRssLossModel
   // set it to zero; otherwise, gain will be added
@@ -558,8 +574,9 @@ AmiGridSim::ConfigureWifi()
   myWifiPhy.EnablePcap ("olsr-hna", olsrDevices, false);
 
 }
+
 void
-AmiGridSim::CreateControllerLan()
+NeighborhoodAmiSim::CreateControllerLan()
 {
   CsmaHelper csma;
   csma.SetChannelAttribute ("DataRate", DataRateValue (DataRate (5000000)));
@@ -568,8 +585,9 @@ AmiGridSim::CreateControllerLan()
   csmaDevices = csma.Install (NodeContainer (controllers, daps));
   csma.EnablePcap ("csma", csmaDevices, false);
 }
+
 void
-AmiGridSim::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, DdsaRoutingProtocolAdapter::NodeType nType )
+NeighborhoodAmiSim::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, DdsaRoutingProtocolAdapter::NodeType nType )
 {
   Ipv4ListRoutingHelper ipv4Routing = ConfigureRouting(lqOlsrDapHelper);
   DdsaInternetStackHelper ddsa;
@@ -577,10 +595,11 @@ AmiGridSim::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer nodes, 
   ddsa.SetNodeType(nType);
   ddsa.Install (nodes);
 }
+
 void
-AmiGridSim::ConfigureDapStack(LqOlsrHelper & helper)
+NeighborhoodAmiSim::ConfigureDapStack(LqOlsrHelper & helper)
 {
-  for (uint32_t i = 0; i < totalDaps; i++)
+  for (int i = 0; i < totalDaps; i++)
     {
       helper.ExcludeInterface (daps.Get (i), 2);
     }
@@ -594,12 +613,13 @@ AmiGridSim::ConfigureDapStack(LqOlsrHelper & helper)
 	  Ptr<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter> ipv4L3 = (*it)->GetObject<ddsa::Ipv4L3ProtocolDdsaAdapter>();
 	  NS_ASSERT (ipv4L3);
 
-	  ipv4L3->TraceConnectWithoutContext("Rx", MakeCallback(&AmiGridSim::NonDdsaDapReceivedPacket, this));
+	  ipv4L3->TraceConnectWithoutContext("Rx", MakeCallback(&NeighborhoodAmiSim::NonDdsaDapReceivedPacket, this));
 	}
     }
 }
+
 void
-AmiGridSim::ConfigureMeterStack(LqOlsrHelper & helper)
+NeighborhoodAmiSim::ConfigureMeterStack(LqOlsrHelper & helper)
 {
   ConfigureStack(helper, meters, DdsaRoutingProtocolAdapter::NodeType::METER);
 
@@ -609,27 +629,29 @@ AmiGridSim::ConfigureMeterStack(LqOlsrHelper & helper)
       Ptr<Node> sender = meters.Get(senderIndexList[0]);
 
       for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
- 	{
- 	  Ptr<ns3::ddsa::DdsaRoutingProtocolAdapter> rp = (*it)->GetObject<ddsa::DdsaRoutingProtocolAdapter>();
- 	  NS_ASSERT (rp);
- 	  rp->TraceConnectWithoutContext("DapSelection", MakeCallback(&AmiGridSim::DapSelectedToNewCopy, this));
-
-	  if ((*it)->GetId() == sender->GetId())
-	    {
-	      rp->TraceConnectWithoutContext("RouteComputed", MakeCallback(&AmiGridSim::SenderRouteUpdated, this));
-	    }
- 	}
+		{
+		  Ptr<ns3::ddsa::DdsaRoutingProtocolAdapter> rp = (*it)->GetObject<ddsa::DdsaRoutingProtocolAdapter>();
+		  NS_ASSERT (rp);
+		  rp->TraceConnectWithoutContext("DapSelection", MakeCallback(&NeighborhoodAmiSim::DapSelectedToNewCopy, this));
+		  rp->TraceConnectWithoutContext("NeighborExpired", MakeCallback(&NeighborhoodAmiSim::NeighborExpired, this));
+		  if ((*it)->GetId() == sender->GetId())
+			{
+			  rp->TraceConnectWithoutContext("RouteComputed", MakeCallback(&NeighborhoodAmiSim::SenderRouteUpdated, this));
+			}
+		}
      }
 }
+
 void
-AmiGridSim::ConfigureControllerStack()
+NeighborhoodAmiSim::ConfigureControllerStack()
 {
   InternetStackHelper internet;
 
   internet.Install (controllers);
 }
+
 Ipv4ListRoutingHelper
-AmiGridSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
+NeighborhoodAmiSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
 {
   Ipv4StaticRoutingHelper staticRouting;
   Ipv4ListRoutingHelper list;
@@ -638,49 +660,35 @@ AmiGridSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
 
   return list;
 }
+
 void
-AmiGridSim::ConfigureDapsHna()
+NeighborhoodAmiSim::ConfigureDapsHna()
 {
   for (uint32_t k = 0; k < daps.GetN() ; k++)
     {
-	Ptr<Ipv4> stack = daps.Get (k)->GetObject<Ipv4> ();
-	Ptr<Ipv4RoutingProtocol> rp_Gw = (stack->GetRoutingProtocol ());
-	Ptr<Ipv4ListRouting> lrp_Gw = DynamicCast<Ipv4ListRouting> (rp_Gw);
+		Ptr<Ipv4> stack = daps.Get (k)->GetObject<Ipv4> ();
+		Ptr<Ipv4RoutingProtocol> rp_Gw = (stack->GetRoutingProtocol ());
+		Ptr<Ipv4ListRouting> lrp_Gw = DynamicCast<Ipv4ListRouting> (rp_Gw);
 
-	Ptr<lqolsr::RoutingProtocol> lqolsr_rp;
+		Ptr<lqolsr::RoutingProtocol> lqolsr_rp;
 
-	for (uint32_t i = 0; i < lrp_Gw->GetNRoutingProtocols ();  i++)
-	{
-		int16_t priority;
-		Ptr<Ipv4RoutingProtocol> temp = lrp_Gw->GetRoutingProtocol (i, priority);
-		if (DynamicCast<lqolsr::RoutingProtocol> (temp))
+		for (uint32_t i = 0; i < lrp_Gw->GetNRoutingProtocols ();  i++)
 		{
-		    lqolsr_rp = DynamicCast<lqolsr::RoutingProtocol> (temp);
+			int16_t priority;
+			Ptr<Ipv4RoutingProtocol> temp = lrp_Gw->GetRoutingProtocol (i, priority);
+			if (DynamicCast<lqolsr::RoutingProtocol> (temp))
+			{
+				lqolsr_rp = DynamicCast<lqolsr::RoutingProtocol> (temp);
+			}
 		}
-	}
 
-	if (assocMethod1)
-	{
-		// Create a special Ipv4StaticRouting instance for RoutingTableAssociation
-		// Even the Ipv4StaticRouting instance added to list may be used
-		Ptr<Ipv4StaticRouting> hnaEntries = Create<Ipv4StaticRouting> ();
-
-		// Add the required routes into the Ipv4StaticRouting Protocol instance
-		// and have the node generate HNA messages for all these routes
-		// which are associated with non-OLSR interfaces specified above.
-		hnaEntries->AddNetworkRouteTo (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"), uint32_t (2), uint32_t (1));
-		lqolsr_rp->SetRoutingTableAssociation (hnaEntries);
-	}
-
-	if (assocMethod2)
-	{
 		// Specify the required associations directly.
-	    lqolsr_rp->AddHostNetworkAssociation (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"));
-	}
+		lqolsr_rp->AddHostNetworkAssociation (Ipv4Address ("172.16.1.0"), Ipv4Mask ("255.255.255.0"));
     }
 }
+
 void
-AmiGridSim::ConfigureNodesStack()
+NeighborhoodAmiSim::ConfigureNodesStack()
 {
   TypeId metricTid = Etx::GetTypeId();
 
@@ -695,8 +703,9 @@ AmiGridSim::ConfigureNodesStack()
   ConfigureControllerStack();
   ConfigureDapsHna();
 }
+
 void
-AmiGridSim::ConfigureIpAddressing()
+NeighborhoodAmiSim::ConfigureIpAddressing()
 {
   NS_LOG_INFO ("Assign IP Addresses.");
 
@@ -730,8 +739,9 @@ AmiGridSim::ConfigureIpAddressing()
 	}
     }
 }
+
 void
-AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
+NeighborhoodAmiSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
 {
   NodeContainer nodes;
   AmiAppHelper amiHelper ("ns3::UdpSocketFactory", Address (InetSocketAddress (csmaIpv4Devices.GetAddress(0), port)));
@@ -740,29 +750,34 @@ AmiGridSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
     {
       Ptr<Node> sender = meters.Get(i);
       if (ddsaEnabled)
-	{
-	  amiHelper.SetAttribute("Retrans", IntegerValue(ddsa_retrans));
-	}
+		{
+		  amiHelper.SetAttribute("Retrans", IntegerValue(ddsa_retrans));
+		}
 
       apps.Add(amiHelper.Install(sender));
-      apps.Get(apps.GetN() - 1)->TraceConnectWithoutContext("Tx", MakeCallback(&AmiGridSim::ApplicationPacketSent, this));
+      apps.Get(apps.GetN() - 1)->TraceConnectWithoutContext("Tx", MakeCallback(&NeighborhoodAmiSim::ApplicationPacketSent, this));
     }
 
-  apps.Start (start);
-  apps.Stop (stop);
+  if (apps.GetN() > 0)
+  {
+	  apps.Start (start);
+	  apps.Stop (stop);
+  }
 }
+
 void
-AmiGridSim::ConfigureControllerSocket(uint16_t port)
+NeighborhoodAmiSim::ConfigureControllerSocket(uint16_t port)
 {
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
   InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), port);
 
   Ptr<Socket> recvController = Socket::CreateSocket (controllers.Get (0), tid);
   recvController->Bind (local);
-  recvController->SetRecvCallback (MakeCallback (&AmiGridSim::ControllerReceivePacket, this));
+  recvController->SetRecvCallback (MakeCallback (&NeighborhoodAmiSim::ControllerReceivePacket, this));
 }
+
 void
-AmiGridSim::ConfigureDapSocket(uint16_t port)
+NeighborhoodAmiSim::ConfigureDapSocket(uint16_t port)
 {
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
   InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), port);
@@ -771,57 +786,36 @@ AmiGridSim::ConfigureDapSocket(uint16_t port)
     {
       Ptr<Socket> recvDap = Socket::CreateSocket (*it, tid);
       recvDap->Bind (local);
-      recvDap->SetRecvCallback (MakeCallback (&AmiGridSim::DdsaDapReceivedPacket, this));
+      recvDap->SetRecvCallback (MakeCallback (&NeighborhoodAmiSim::DdsaDapReceivedPacket, this));
     }
 }
 
 //Callbacks
 
 void
-AmiGridSim::SenderRouteUpdated(std::vector<ddsa::Dap> daps, const Ipv4Address & address)
+NeighborhoodAmiSim::NeighborExpired(Ipv4Address neighborAddress)
+{
+	NS_LOG_UNCOND("Neighbor " << neighborAddress << " expired.");
+}
+
+void
+NeighborhoodAmiSim::SenderRouteUpdated(std::vector<ddsa::Dap> daps, const Ipv4Address & address)
 {
   NS_LOG_UNCOND("Route Updated");
-
-  //float costSum = 0;
 
   for(std::vector<ddsa::Dap>::iterator it = daps.begin(); it != daps.end(); it++)
     {
       NS_LOG_UNCOND("DAP " << it->address << " updated: " << it->cost << " at " << Simulator::Now().GetSeconds());
 
-//      if (!it->excluded)
-//	{
-//	  costSum+= it->cost;
-//	}
       if (daps.size() == this->daps.GetN() && senderIndexList.size() == 1)
-	{
-	  costHistory[it->address].push_back(*it);
-	}
+		{
+		  costHistory[it->address].push_back(*it);
+		}
     }
-
-//  if (daps.size() == 0)
-//    {
-//      return;
-//    }
-//
-//
-//  float meanCost = costSum / daps.size();
-//
-//  for(int i : senderIndexList)
-//    {
-//      Ptr<Node> sender = meters.Get(i);
-//      if (GetIpAddressForOlsrNode(sender) == address)
-//	{
-//	  int retrans = round(meanCost / 2);
-//
-//	  NS_LOG_UNCOND("Node " << sender->GetId() << "(" << address << ") will perform " << retrans << " retransmissions");
-//
-//	  sender->GetApplication(0)->SetAttribute("Retrans", IntegerValue(retrans));
-//	}
-//    }
 }
 
 void
-AmiGridSim::DdsaDapReceivedPacket (Ptr<Socket> socket)
+NeighborhoodAmiSim::DdsaDapReceivedPacket (Ptr<Socket> socket)
 {
   Ptr<Packet> packet;
   Address from;
@@ -831,18 +825,18 @@ AmiGridSim::DdsaDapReceivedPacket (Ptr<Socket> socket)
 
       if (packet->PeekHeader(amiHeader) != 0)
       {
-	  uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-	  NS_LOG_UNCOND ("Dap " << socket->GetNode()->GetId() << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
+		  uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+		  NS_LOG_UNCOND ("Dap " << socket->GetNode()->GetId() << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
 
-	  Ptr<Packet> pkt = Create<Packet>();
-	  pkt->AddHeader(amiHeader);
-	  SendPacketToController(pkt, socket->GetNode());
+		  Ptr<Packet> pkt = Create<Packet>();
+		  pkt->AddHeader(amiHeader);
+		  SendPacketToController(pkt, socket->GetNode());
       }
     }
 }
 
 void
-AmiGridSim::NonDdsaDapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interfaceId)
+NeighborhoodAmiSim::NonDdsaDapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interfaceId)
 {
   Ipv4Address address = ipv4->GetAddress(interfaceId, 0).GetLocal();
   Ipv4Mask mask = ipv4->GetAddress(interfaceId, 0).GetMask();
@@ -858,23 +852,21 @@ AmiGridSim::NonDdsaDapReceivedPacket(Ptr<const Packet> packet, Ptr<Ipv4> ipv4, u
       return;
     }
 
-
-
   if (pktCopy->RemoveHeader(udp) != 0)
     {
 
       if (pktCopy->RemoveHeader(amiHeader) != 0)
-      {
-	uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-	NS_LOG_UNCOND ("Dap " << address << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
-	UpdateDapSelectionHistory(address, seqNumber);
-	totalSentCopies++;
-      }
+		  {
+			uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+			NS_LOG_UNCOND ("Dap " << address << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
+			UpdateDapSelectionHistory(address, seqNumber);
+			totalSentCopies++;
+		  }
     }
 }
 
 void
-AmiGridSim::UpdateDapSelectionHistory(const Ipv4Address & address, uint16_t seqNumber)
+NeighborhoodAmiSim::UpdateDapSelectionHistory(const Ipv4Address & address, uint16_t seqNumber)
 {
   bool found = false;
   std::vector<AmiPacketInfo>::iterator it = dapSelectionHistory[address].begin();
@@ -899,7 +891,7 @@ AmiGridSim::UpdateDapSelectionHistory(const Ipv4Address & address, uint16_t seqN
 }
 
 void
-AmiGridSim::ApplicationPacketSent(Ptr<const Packet> packetSent)
+NeighborhoodAmiSim::ApplicationPacketSent(Ptr<const Packet> packetSent)
 {
   AmiHeader amiHeader;
   packetSent->PeekHeader(amiHeader);
@@ -914,7 +906,7 @@ AmiGridSim::ApplicationPacketSent(Ptr<const Packet> packetSent)
 }
 
 void
-AmiGridSim::ControllerReceivePacket (Ptr<Socket> socket)
+NeighborhoodAmiSim::ControllerReceivePacket (Ptr<Socket> socket)
 {
   Ptr<Packet> packet;
   Address from;
@@ -924,42 +916,36 @@ AmiGridSim::ControllerReceivePacket (Ptr<Socket> socket)
       packet->PeekHeader(amiHeader);
 
       if (amiHeader.GetReadingInfo() == 1)
-	{
-	  uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-	  uint16_t meterId = amiHeader.GetNodeId();
+		{
+		  uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+		  uint16_t meterId = amiHeader.GetNodeId();
 
-	  NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " sent by " << meterId << " at " << Simulator::Now().GetSeconds());
+		  NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " sent by " << meterId << " at " << Simulator::Now().GetSeconds());
 
 
-	  if (!packetsSent[meterId][seqNumber].Received())
-	    {
-	      packetsSent[meterId][seqNumber].Receive();
-	    }
+		  if (!packetsSent[meterId][seqNumber].Received())
+			{
+			  packetsSent[meterId][seqNumber].Receive();
+			}
+		  else
+			{
+			  packetsSent[meterId][seqNumber].IncrementReceived();
+			}
+		}
 	  else
-	    {
-	      packetsSent[meterId][seqNumber].IncrementReceived();
-	    }
-	}
-      else
-	{
-	  NS_LOG_UNCOND ("Controller: Received non-ami packet at " << Simulator::Now().GetSeconds());
-	}
+		{
+		  NS_LOG_UNCOND ("Controller: Received non-ami packet at " << Simulator::Now().GetSeconds());
+		}
     }
 }
 
 void
-AmiGridSim::DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<Packet> packet)
+NeighborhoodAmiSim::DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<Packet> packet)
 {
   UdpHeader udp;
   AmiHeader amiHeader;
 
   packet->PeekHeader(amiHeader);
-
-//  if (amiHeader.GetReadingInfo() != 1)
-//    {
-//      packet->RemoveHeader(udp);
-//      packet->RemoveHeader(amiHeader);
-//    }
 
   if (amiHeader.GetReadingInfo() == 1)
     {
@@ -973,12 +959,10 @@ AmiGridSim::DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<Packet> pac
     {
       NS_LOG_UNCOND ("Dap selection failed");
     }
-
-
 }
 
 void
-AmiGridSim::SendPacketToController(Ptr<Packet> packet, Ptr<Node> node)
+NeighborhoodAmiSim::SendPacketToController(Ptr<Packet> packet, Ptr<Node> node)
 {
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
   Ptr<Socket> source = Socket::CreateSocket (node, tid);
@@ -990,23 +974,23 @@ AmiGridSim::SendPacketToController(Ptr<Packet> packet, Ptr<Node> node)
 //Failure generation
 
 void
-AmiGridSim::SheduleFailure(double time)
+NeighborhoodAmiSim::SheduleFailure(double time)
 {
   failureTime = Seconds (time);
   if (withFailure)
     {
-      m_events.Track (Simulator::Schedule (failureTime, &AmiGridSim::ExecuteFailure, this));
+      m_events.Track (Simulator::Schedule (failureTime, &NeighborhoodAmiSim::ExecuteFailure, this));
     }
 }
 
 Ptr<Node>
-AmiGridSim::GetRandomFailingNode()
+NeighborhoodAmiSim::GetRandomFailingNode()
 {
   return daps.Get(m_rnd->GetInteger(0, daps.GetN() - 1));
 }
 
 Ptr<Node>
-AmiGridSim::GetDdsaFailingNode()
+NeighborhoodAmiSim::GetDdsaFailingNode()
 {
   Ptr<Node> failingDap = 0;
 
@@ -1016,18 +1000,18 @@ AmiGridSim::GetDdsaFailingNode()
       ddsa::Dap bestDap = ddsa->GetBestCostDap();
 
       if (ddsa)
-	{
-	  if (bestDap.address != Ipv4Address::GetBroadcast())
-	    {
-	      for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
 		{
-		  if (bestDap.address == GetIpAddressForOlsrNode(*it))
-		    {
-		      failingDap = *it;
-		    }
+		  if (bestDap.address != Ipv4Address::GetBroadcast())
+			{
+			  for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
+				{
+				  if (bestDap.address == GetIpAddressForOlsrNode(*it))
+					{
+					  failingDap = *it;
+					}
+				}
+			}
 		}
-	    }
-	}
     }
 
   if (!failingDap)
@@ -1040,7 +1024,7 @@ AmiGridSim::GetDdsaFailingNode()
 }
 
 Ptr<Node>
-AmiGridSim::GetNonDdsaFailingNode()
+NeighborhoodAmiSim::GetNonDdsaFailingNode()
 {
   Ptr<Node> failingDap = 0;
 
@@ -1049,33 +1033,30 @@ AmiGridSim::GetNonDdsaFailingNode()
       Ptr<lqolsr::RoutingProtocol> rp = meters.Get(senderIndexList[0])->GetObject<lqolsr::RoutingProtocol>();
 
       if (rp)
-	{
-	  Ipv4Address bestDapAddress = rp->GetBestHnaGateway();
-
-	  for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
-	    {
-	      if (bestDapAddress == GetIpAddressForOlsrNode(*it))
 		{
-		  failingDap = *it;
-		}
-	    }
-	}
-    }
+		  Ipv4Address bestDapAddress = rp->GetBestHnaGateway();
 
+		  for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
+			{
+			  if (bestDapAddress == GetIpAddressForOlsrNode(*it))
+				{
+				  failingDap = *it;
+				}
+			}
+		}
+    }
 
   if (!failingDap)
     {
       failingDap = GetRandomFailingNode();
     }
 
-
-
   return failingDap;
 
 }
 
 void
-AmiGridSim::ExecuteFailure()
+NeighborhoodAmiSim::ExecuteFailure()
 {
   Ptr<Node> failingDap = 0;
 
@@ -1099,35 +1080,18 @@ AmiGridSim::ExecuteFailure()
 
     if (failureMode == 1)
       {
-	Ptr<ddsa::DdsaRoutingProtocolAdapter> rp = failingDap->GetObject<ddsa::DdsaRoutingProtocolAdapter>();
-	if (rp)
-	  {
-	    rp->SetMalicious(true);
-	  }
+		Ptr<ddsa::DdsaRoutingProtocolAdapter> rp = failingDap->GetObject<ddsa::DdsaRoutingProtocolAdapter>();
+		if (rp)
+		  {
+			rp->SetMalicious(true);
+		  }
       }
 }
 
 //Statistics
 
-bool
-AmiGridSim::ComplyWithMinRedundancy()
-{
-  for (int i : senderIndexList)
-    {
-      Ptr<Node> sender = meters.Get(i);
-      Ptr<DdsaRoutingProtocolAdapter> ddsa = sender->GetObject<DdsaRoutingProtocolAdapter>();
-
-      if (ddsa && ddsa->GetTotalCurrentEligibleDaps() < redundancy)
-        {
-          return false;
-        }
-    }
-
-  return true;
-}
-
 double
-AmiGridSim::CalculateDeliveryRate()
+NeighborhoodAmiSim::CalculateDeliveryRate()
 {
   int totalReceived = 0;
   double totalSent = 0;
@@ -1138,25 +1102,25 @@ AmiGridSim::CalculateDeliveryRate()
       totalSent+= sent.size();
 
       for (std::map<uint16_t, AmiPacketInfo>::iterator info = sent.begin(); info != sent.end(); info++)
-	{
-	  if (info->second.Received())
-	    {
-	      totalReceived++;
-	    }
-	}
+		{
+		  if (info->second.Received())
+			{
+			  totalReceived++;
+			}
+		}
     }
 
   return 100 * totalReceived / totalSent;
 }
 
 double
-AmiGridSim::CalculateLossRate()
+NeighborhoodAmiSim::CalculateLossRate()
 {
   return 100 - CalculateDeliveryRate();
 }
 
 double
-AmiGridSim::CalculateDapSelection(const Ipv4Address & dapAddress)
+NeighborhoodAmiSim::CalculateDapSelection(const Ipv4Address & dapAddress)
 {
   std::vector<AmiPacketInfo> infos = dapSelectionHistory[dapAddress];
 
@@ -1171,7 +1135,7 @@ AmiGridSim::CalculateDapSelection(const Ipv4Address & dapAddress)
 }
 
 void
-AmiGridSim::GenerateControllerReceptionStatistics()
+NeighborhoodAmiSim::GenerateControllerReceptionStatistics()
 {
   std::ofstream statFile;
   statFile.open("packets.txt");
@@ -1185,47 +1149,47 @@ AmiGridSim::GenerateControllerReceptionStatistics()
       statFile << "Packets sent by meter " << it->first << "\n\n";
 
       for (std::map<uint16_t, AmiPacketInfo>::iterator info = sent.begin(); info != sent.end(); info++)
-	{
-	  statFile << "Packet " << info->second.GetSeqNumber() << " -----------------------";
-	  statFile << (info->second.Received() ? "\n" : "(Lost)\n");
-
-	  statFile << "Sent at: " << info->second.GetLatency().time_sent.GetSeconds() << " seconds\n";
-
-	  if (info->second.Received())
-	    {
-	      int64_t latency = info->second.GetLatency().time_received.GetMilliSeconds() - info->second.GetLatency().time_sent.GetMilliSeconds();
-
-	      statFile << "Received at: " << info->second.GetLatency().time_received.GetSeconds() << " seconds";
-
-	      if (withFailure && info->second.GetLatency().time_received >= failureTime)
 		{
-		  statFile << "(After failure)\n";
-		}
-	      else
-		{
-		  statFile << "\n";
-		}
+		  statFile << "Packet " << info->second.GetSeqNumber() << " -----------------------";
+		  statFile << (info->second.Received() ? "\n" : "(Lost)\n");
 
-	      statFile << "Latency: " << latency << "ms \n";
-	      statFile << "Received copies: " << info->second.GetNReceived() << "\n\n";
-	    }
-	}
+		  statFile << "Sent at: " << info->second.GetLatency().time_sent.GetSeconds() << " seconds\n";
+
+		  if (info->second.Received())
+			{
+			  int64_t latency = info->second.GetLatency().time_received.GetMilliSeconds() - info->second.GetLatency().time_sent.GetMilliSeconds();
+
+			  statFile << "Received at: " << info->second.GetLatency().time_received.GetSeconds() << " seconds";
+
+			  if (withFailure && info->second.GetLatency().time_received >= failureTime)
+				{
+				  statFile << "(After failure)\n";
+				}
+			  else
+				{
+				  statFile << "\n";
+				}
+
+			  statFile << "Latency: " << latency << "ms \n";
+			  statFile << "Received copies: " << info->second.GetNReceived() << "\n\n";
+			}
+		}
     }
 
   statFile.close();
 }
 
 double
-AmiGridSim::CalculateMeanCost(const Ipv4Address & dapAddress)
+NeighborhoodAmiSim::CalculateMeanCost(const Ipv4Address & dapAddress)
 {
   if (costHistory.find(dapAddress) != costHistory.end())
     {
       std::vector<Dap> costs = costHistory[dapAddress];
       double sum = 0;
       for(std::vector<ddsa::Dap>::iterator it = costs.begin(); it != costs.end(); it++)
-	{
-	  sum+= it->cost;
-	}
+		{
+		  sum+= it->cost;
+		}
 
       return sum / costs.size();
     }
@@ -1234,7 +1198,7 @@ AmiGridSim::CalculateMeanCost(const Ipv4Address & dapAddress)
 }
 
 double
-AmiGridSim::CalculateMeanLatency()
+NeighborhoodAmiSim::CalculateMeanLatency()
 {
   int64_t sum = 0;
   int totalReceived = 0;
@@ -1244,30 +1208,30 @@ AmiGridSim::CalculateMeanLatency()
       std::map<uint16_t, AmiPacketInfo> sent = it->second;
 
       for (std::map<uint16_t, AmiPacketInfo>::iterator info = sent.begin(); info != sent.end(); info++)
-	{
-	  if (info->second.Received())
-	    {
-	      int64_t latency = info->second.GetLatency().time_received.GetMilliSeconds() - info->second.GetLatency().time_sent.GetMilliSeconds();
-	      sum+= latency;
-	      totalReceived++;
-	    }
-	}
+		{
+		  if (info->second.Received())
+			{
+			  int64_t latency = info->second.GetLatency().time_received.GetMilliSeconds() - info->second.GetLatency().time_sent.GetMilliSeconds();
+			  sum+= latency;
+			  totalReceived++;
+			}
+		}
     }
 
   return (double)sum / totalReceived;
 }
 
 double
-AmiGridSim::CalculateMeanProbability(const Ipv4Address & dapAddress)
+NeighborhoodAmiSim::CalculateMeanProbability(const Ipv4Address & dapAddress)
 {
   if (costHistory.find(dapAddress) != costHistory.end())
     {
       std::vector<Dap> costs = costHistory[dapAddress];
       double sum = 0;
       for(std::vector<ddsa::Dap>::iterator it = costs.begin(); it != costs.end(); it++)
-	{
-	  sum+= it->probability;
-	}
+		{
+		  sum+= it->probability;
+		}
 
       return sum / costs.size();
     }
@@ -1276,7 +1240,7 @@ AmiGridSim::CalculateMeanProbability(const Ipv4Address & dapAddress)
 }
 
 int
-AmiGridSim::GetTotalSentCopies()
+NeighborhoodAmiSim::GetTotalSentCopies()
 {
   int total = 0;
 
@@ -1285,16 +1249,16 @@ AmiGridSim::GetTotalSentCopies()
       std::map<uint16_t, AmiPacketInfo> sent = it->second;
 
       for (std::map<uint16_t, AmiPacketInfo>::iterator info = sent.begin(); info != sent.end(); info++)
-      {
-	  total+= info->second.GetNSent();
-      }
+		  {
+		  	  total+= info->second.GetNSent();
+		  }
     }
 
   return total;
 }
 
 void
-AmiGridSim::GenerateDapStatistics()
+NeighborhoodAmiSim::GenerateDapStatistics()
 {
   std::ofstream statFile;
 
@@ -1317,10 +1281,10 @@ AmiGridSim::GenerateDapStatistics()
       statFile << "Dap " << it->first << " ( selection rate = " << CalculateDapSelection(it->first) << " )\n\n";
 
       for (std::vector<AmiPacketInfo>::iterator it2 = it->second.begin(); it2 != it->second.end(); it2++)
-	{
-	  statFile << "seq " << it2->GetSeqNumber() << " ( " << it2->GetNReceived() << " )\n";
-	  totalCopies += it2->GetNReceived();
-	}
+		{
+		  statFile << "seq " << it2->GetSeqNumber() << " ( " << it2->GetNReceived() << " )\n";
+		  totalCopies += it2->GetNReceived();
+		}
 
       statFile << "Total copies: " << totalCopies << "(" << totalCopies * 100.0 / total << "%)\n";
       statFile << "Average cost: " << CalculateMeanCost(it->first) << "\n";
@@ -1330,7 +1294,7 @@ AmiGridSim::GenerateDapStatistics()
 }
 
 void
-AmiGridSim::GenerateGeneralStatistics()
+NeighborhoodAmiSim::GenerateGeneralStatistics()
 {
   std::ofstream statFile;
 
@@ -1358,36 +1322,27 @@ AmiGridSim::GenerateGeneralStatistics()
   statFile << "l_rate: " << CalculateLossRate() << "%" << "//Loss rate" << std::endl;
   statFile << "l_avg: " << CalculateMeanLatency() << " ms" << "//Average latency" << std::endl;
 
-  if (ComplyWithMinRedundancy())
-    {
-      statFile << "Comply with min redundancy" << std::endl;
-    }
-  else
-    {
-      statFile << "Do not comply with min redundancy" << std::endl;
-    }
-
   statFile.close();
 }
 
 Ptr<NetDevice>
-AmiGridSim::GetDeviceForNode(Ptr<Node> node, NetDeviceContainer devices)
+NeighborhoodAmiSim::GetDeviceForNode(Ptr<Node> node, NetDeviceContainer devices)
 {
   for (uint32_t i = 0; i < devices.GetN (); ++i)
     {
       Ptr<NetDevice> device = devices.Get (i);
 
       if (device->GetNode()->GetId() == node->GetId())
-      {
-	return device;
-      }
+		{
+    	  return device;
+		}
     }
 
     return NULL;
 }
 
 Ipv4Address
-AmiGridSim::GetIpAddressForNode(Ptr<Node> node, Ptr<NetDevice> device)
+NeighborhoodAmiSim::GetIpAddressForNode(Ptr<Node> node, Ptr<NetDevice> device)
 {
   Ptr<Ipv4> ipv4 = node->GetObject<Ipv4> ();
 
@@ -1397,7 +1352,7 @@ AmiGridSim::GetIpAddressForNode(Ptr<Node> node, Ptr<NetDevice> device)
 }
 
 Ipv4Address
-AmiGridSim::GetIpAddressForCsmaNode(Ptr<Node> node)
+NeighborhoodAmiSim::GetIpAddressForCsmaNode(Ptr<Node> node)
 {
   Ptr<NetDevice> device = GetDeviceForNode(node, csmaDevices);
 
@@ -1405,63 +1360,21 @@ AmiGridSim::GetIpAddressForCsmaNode(Ptr<Node> node)
 }
 
 Ipv4Address
-AmiGridSim::GetIpAddressForOlsrNode(Ptr<Node> node)
+NeighborhoodAmiSim::GetIpAddressForOlsrNode(Ptr<Node> node)
 {
   Ptr<NetDevice> device = GetDeviceForNode(node, olsrDevices);
 
   return GetIpAddressForNode(node, device);
 }
 
-void
-AmiGridSim::SaveDapsCurrentPosition()
-{
-  std::ofstream statFile;
-
-  std::string fileName = "dap_pos.txt";
-
-  statFile.open(fileName, std::ofstream::out | std::ofstream::app);
-
-  for (uint32_t i = 0; i < daps.GetN (); ++i)
-    {
-      Ptr<Node> node = daps.Get (i);
-      Ptr<MobilityModel> model = node->GetObject<MobilityModel>();
-
-      if (model != NULL)
-      	{
-      	  statFile << "X = " << model->GetPosition().x << "\n";
-      	  statFile << "Y = " << model->GetPosition().y << "\n";
-      	  statFile << "Cost = " << CalculateMeanCost(GetIpAddressForOlsrNode(node)) << "\n";
-      	}
-    }
-
-  statFile.close();
-}
-
 int main (int argc, char *argv[])
 {
-  AmiGridSim simulation;
+  NeighborhoodAmiSim simulation;
 
   simulation.Configure(argc, argv);
-
-  Ptr<ListPositionAllocator> metersPositionAlloc = simulation.CreateMetersPosition();
-  Ptr<ListPositionAllocator> dapsPositionAlloc;
-
-  if (simulation.GetTopologyFile() != "none")
-    {
-      dapsPositionAlloc = simulation.CreateDapsPosition(simulation.GetDapPositions());
-      NS_LOG_INFO("Using existing topologies");
-    }
-  else
-    {
-      dapsPositionAlloc = simulation.CreateRandomDapsPosition();
-      NS_LOG_INFO("Criating random positions");
-    }
-
-  Ptr<ListPositionAllocator> controllerPositionAlloc = simulation.CreateControllerPosition();
-
   simulation.CreateNodes();
+  simulation.CreateTopology();
 
-  simulation.InstallMobilityModel(metersPositionAlloc, dapsPositionAlloc, controllerPositionAlloc);
   simulation.ConfigureWifi();
   simulation.CreateControllerLan();
   simulation.ConfigureNodesStack();
@@ -1495,11 +1408,6 @@ int main (int argc, char *argv[])
 
   simulation.GenerateGeneralStatistics();
   simulation.GenerateControllerReceptionStatistics();
-
-  if (simulation.ComplyWithMinRedundancy() && simulation.GetTopologyFile() == "none")
-    {
-      simulation.SaveDapsCurrentPosition();
-    }
 
   Simulator::Destroy ();
 

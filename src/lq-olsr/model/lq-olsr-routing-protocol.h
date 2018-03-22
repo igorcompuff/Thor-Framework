@@ -286,6 +286,19 @@ protected:
    */
   virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
 
+  /**
+     * \brief Removes tuple_ if expired. Else if symmetric time
+     * has expired then it is assumed a neighbor loss and agent_->nb_loss()
+     * is called. In this case the timer is rescheduled to expire at
+     * tuple_->time(). Otherwise the timer is rescheduled to expire at
+     * the minimum between tuple_->time() and tuple_->sym_time().
+     *
+     * The task of actually removing the tuple is left to the OLSR agent.
+     *
+     * \param neighborIfaceAddr The tuple neighbor interface address.
+     */
+    virtual void LinkTupleTimerExpire (Ipv4Address neighborIfaceAddr);
+
 
   /**
    * \brief Creates the routing table of the node following \RFC{3626} hints.
@@ -558,18 +571,6 @@ private:
   void DupTupleTimerExpire (Ipv4Address address, uint16_t sequenceNumber);
 
   bool m_linkTupleTimerFirstTime; //!< Flag to indicate if it is the first time the LinkTupleTimer fires.
-  /**
-   * \brief Removes tuple_ if expired. Else if symmetric time
-   * has expired then it is assumed a neighbor loss and agent_->nb_loss()
-   * is called. In this case the timer is rescheduled to expire at
-   * tuple_->time(). Otherwise the timer is rescheduled to expire at
-   * the minimum between tuple_->time() and tuple_->sym_time().
-   *
-   * The task of actually removing the tuple is left to the OLSR agent.
-   *
-   * \param neighborIfaceAddr The tuple neighbor interface address.
-   */
-  void LinkTupleTimerExpire (Ipv4Address neighborIfaceAddr);
 
   /**
    * \brief Removes 2_hop neighbor tuple_ if expired. Else the timer is rescheduled to expire at tuple_->time().

@@ -1441,21 +1441,21 @@ RoutingProtocol::GetLinkCode(const LinkTuple & link_tuple, Time now)
 	  if (nb_tuple->neighborMainAddr == GetMainAddress (link_tuple.neighborIfaceAddr))
 	    {
 	      if (nb_tuple->status == NeighborTuple::STATUS_SYM)
-		{
-		  NS_LOG_DEBUG ("I consider neighbor " << GetMainAddress (link_tuple.neighborIfaceAddr)
-				<< " to be SYM_NEIGH.");
-		  nb_type = OLSR_SYM_NEIGH;
-		}
+			{
+			  NS_LOG_DEBUG ("I consider neighbor " << GetMainAddress (link_tuple.neighborIfaceAddr)
+					<< " to be SYM_NEIGH.");
+			  nb_type = OLSR_SYM_NEIGH;
+			}
 	      else if (nb_tuple->status == NeighborTuple::STATUS_NOT_SYM)
-		{
-		  nb_type = OLSR_NOT_NEIGH;
-		  NS_LOG_DEBUG ("I consider neighbor " << GetMainAddress (link_tuple.neighborIfaceAddr)
-				<< " to be NOT_NEIGH.");
-		}
+			{
+			  nb_type = OLSR_NOT_NEIGH;
+			  NS_LOG_DEBUG ("I consider neighbor " << GetMainAddress (link_tuple.neighborIfaceAddr)
+					<< " to be NOT_NEIGH.");
+			}
 	      else
-		{
-		  NS_FATAL_ERROR ("There is a neighbor tuple with an unknown status!\n");
-		}
+			{
+			  NS_FATAL_ERROR ("There is a neighbor tuple with an unknown status!\n");
+			}
 	      ok = true;
 	      break;
 	    }
@@ -1500,9 +1500,9 @@ RoutingProtocol::SendHello ()
       uint8_t linkCode = GetLinkCode((*link_tuple), now);
 
       if (linkCode == 0)
-      {
-	continue;
-      }
+	  {
+    	  continue;
+	  }
 
       linkMessage.linkCode = linkCode;
 
@@ -1519,10 +1519,10 @@ RoutingProtocol::SendHello ()
       for (std::vector<Ipv4Address>::iterator it = interfaces.begin(); it != interfaces.end();
 	  it++)
       {
-	neigh_info.neighborInterfaceAddress = (*it);
-	neigh_info.metricInfo = m_metric->GetHelloInfo((*it));
+		neigh_info.neighborInterfaceAddress = (*it);
+		neigh_info.metricInfo = m_metric->GetHelloInfo((*it));
 
-	neighInfos.push_back(neigh_info);
+		neighInfos.push_back(neigh_info);
       }
 
       linkMessage.neighborInterfaceInformation.insert(linkMessage.neighborInterfaceInformation.end(),

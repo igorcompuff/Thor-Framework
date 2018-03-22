@@ -39,9 +39,12 @@ namespace ns3 {
 	.AddTraceSource ("RouteComputed", "Called when a new route computation is performed",
 			 MakeTraceSourceAccessor (&DdsaRoutingProtocolAdapter::m_newRouteComputedTrace),
 			 "ns3::ddsa::DdsaRoutingProtocolAdapter::NewRouteComputedTracedCallback")
-	.AddTraceSource ("DapSelection", "Calleds when a new dap is selected",
+	.AddTraceSource ("DapSelection", "Called when a new dap is selected",
 				 MakeTraceSourceAccessor (&DdsaRoutingProtocolAdapter::m_dapSelectionTrace),
-				 "ns3::ddsa::DdsaRoutingProtocolAdapter::SelectedTracedCallback");
+				 "ns3::ddsa::DdsaRoutingProtocolAdapter::SelectedTracedCallback")
+	 .AddTraceSource ("NeighborExpired", "Called when the linktuple timer expires for some neighbor",
+					 MakeTraceSourceAccessor (&DdsaRoutingProtocolAdapter::m_neighborExpiredTrace),
+					 "ns3::ddsa::DdsaRoutingProtocolAdapter::NeighborExpiredCallback");
       return tid;
     }
 
@@ -255,16 +258,23 @@ namespace ns3 {
       std::map<Ipv4Address, Dap>::iterator it = m_gateways.find(gatewayAddr);
 
       if (it != m_gateways.end() && it->second.expirationTime < Simulator::Now ())
-	{
-	  m_gateways.erase(it);
+		{
+		  m_gateways.erase(it);
 
-	  NS_LOG_DEBUG("DAP " << it->second.address << " expired. Now we have " << m_gateways.size() << " Daps.");
+		  NS_LOG_DEBUG("DAP " << it->second.address << " expired. Now we have " << m_gateways.size() << " Daps.");
 
-	  ClearDapExclusions();
-	  BuildEligibleGateways();
-	}
+		  ClearDapExclusions();
+		  BuildEligibleGateways();
+		}
 
       RoutingProtocol::AssociationTupleTimerExpire(gatewayAddr, networkAddr, netmask);
+    }
+
+    void
+	DdsaRoutingProtocolAdapter::LinkTupleTimerExpire (Ipv4Address neighborIfaceAddr)
+    {
+
+    	RoutingProtocol::LinkTupleTimerExpire(neighborIfaceAddr);
     }
 
     bool
