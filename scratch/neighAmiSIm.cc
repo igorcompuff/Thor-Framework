@@ -157,8 +157,6 @@ class NeighborhoodAmiSim
     //void PrintReceivedPackets(std::ofstream stream);
     void SheduleFailure(double time);
     Ptr<Node> GetRandomFailingNode();
-    Ptr<Node> GetDdsaFailingNode();
-    Ptr<Node> GetNonDdsaFailingNode();
     void ExecuteFailure();
     void GenerateDapStatistics();
     void GenerateControllerReceptionStatistics();
@@ -212,17 +210,19 @@ class NeighborhoodAmiSim
     Ipv4Address GetIpAddressForCsmaNode(Ptr<Node> node);
     int GetTotalSentCopies();
     void ParseSenders();
+    Ptr<Node> GetNodeById(uint32_t id, NodeContainer nodes);
 
     std::string phyMode;
     bool withFailure;
     int failureMode;
     bool ddsaEnabled;
+    int failingDapId;
     CommandLine cmd;
     NodeContainer daps;
     NodeContainer meters;
     NodeContainer controllers;
     std::string senderIndexes;
-    std::vector<int> senderIndexList;
+    std::vector<uint32_t> senderIndexList;
     Ptr<MatrixPropagationLossModel> myLossModel;
     YansWifiPhyHelper myWifiPhy;
     Ipv4InterfaceContainer olsrIpv4Devices;
@@ -260,6 +260,7 @@ NeighborhoodAmiSim::NeighborhoodAmiSim (): phyMode ("DsssRate1Mbps")
     failureMode = 0; //Full failure
 
     myLossModel = CreateObject<MatrixPropagationLossModel> ();
+    failingDapId = -1;
 }
 
 NeighborhoodAmiSim::~NeighborhoodAmiSim ()
@@ -276,6 +277,7 @@ NeighborhoodAmiSim::Parse(int argc, char *argv[])
   cmd.AddValue ("retrans", "Number of retransmissions", ddsa_retrans);
   cmd.AddValue ("dumb", "Ddsa in dumb mode", dumb);
   cmd.AddValue ("fmode", "Failure mode", failureMode);
+  cmd.AddValue ("dap", "Failing DAP id", failingDapId);
 
   cmd.Parse (argc, argv);
 }
@@ -285,39 +287,39 @@ NeighborhoodAmiSim::Parse(int argc, char *argv[])
 void
 NeighborhoodAmiSim::ParseSenders()
 {
-  if (senderIndexes == "*")
-    {
-      for(uint32_t i = 0; i < meters.GetN(); i++)
+	if (senderIndexes == "*")
+	{
+		for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
 		{
-		  senderIndexList.push_back(i);
+			senderIndexList.push_back((*it)->GetId());
 		}
-    }
-  else
-    {
-      if (senderIndexes == "none")
-      {
-    	  return;
-      }
-
-	  std::string indexStr = "";
-      for(std::string::size_type i = 0; i < senderIndexes.size(); ++i)
+	}
+	else
+	{
+		if (senderIndexes == "none")
 		{
-			  if (senderIndexes[i] == ',')
-				{
-				  senderIndexList.push_back(std::stoi(indexStr));
-				  indexStr = "";
-				}
-			  else
-				{
-				  indexStr+= senderIndexes[i];
-				}
+			return;
 		}
 
-      if (!indexStr.empty())
+		std::string indexStr = "";
+		for(std::string::size_type i = 0; i < senderIndexes.size(); ++i)
 		{
-		  senderIndexList.push_back(std::stoi(indexStr));
+			if (senderIndexes[i] == ',')
+			{
+				senderIndexList.push_back(std::stoi(indexStr));
+				indexStr = "";
+			}
+			else
+			{
+				indexStr+= senderIndexes[i];
+			}
 		}
-    }
+
+		if (!indexStr.empty())
+		{
+			senderIndexList.push_back(std::stoi(indexStr));
+		}
+	}
 }
 
 void
@@ -599,23 +601,23 @@ NeighborhoodAmiSim::ConfigureStack(LqOlsrHelper & lqOlsrDapHelper, NodeContainer
 void
 NeighborhoodAmiSim::ConfigureDapStack(LqOlsrHelper & helper)
 {
-  for (int i = 0; i < totalDaps; i++)
-    {
-      helper.ExcludeInterface (daps.Get (i), 2);
-    }
-
-  ConfigureStack(helper, daps, DdsaRoutingProtocolAdapter::NodeType::DAP);
-
-  if (!ddsaEnabled)
-    {
-      for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
+	for (int i = 0; i < totalDaps; i++)
 	{
-	  Ptr<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter> ipv4L3 = (*it)->GetObject<ddsa::Ipv4L3ProtocolDdsaAdapter>();
-	  NS_ASSERT (ipv4L3);
-
-	  ipv4L3->TraceConnectWithoutContext("Rx", MakeCallback(&NeighborhoodAmiSim::NonDdsaDapReceivedPacket, this));
+		helper.ExcludeInterface (daps.Get (i), 2);
 	}
-    }
+
+	ConfigureStack(helper, daps, DdsaRoutingProtocolAdapter::NodeType::DAP);
+
+	if (!ddsaEnabled)
+	{
+		for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
+		{
+			Ptr<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter> ipv4L3 = (*it)->GetObject<ddsa::Ipv4L3ProtocolDdsaAdapter>();
+			NS_ASSERT (ipv4L3);
+
+			ipv4L3->TraceConnectWithoutContext("Rx", MakeCallback(&NeighborhoodAmiSim::NonDdsaDapReceivedPacket, this));
+		}
+	}
 }
 
 void
@@ -626,7 +628,7 @@ NeighborhoodAmiSim::ConfigureMeterStack(LqOlsrHelper & helper)
   if (ddsaEnabled)
      {
 
-      Ptr<Node> sender = meters.Get(senderIndexList[0]);
+      //Ptr<Node> sender = meters.Get(senderIndexList[0]);
 
       for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
 		{
@@ -634,7 +636,7 @@ NeighborhoodAmiSim::ConfigureMeterStack(LqOlsrHelper & helper)
 		  NS_ASSERT (rp);
 		  rp->TraceConnectWithoutContext("DapSelection", MakeCallback(&NeighborhoodAmiSim::DapSelectedToNewCopy, this));
 		  rp->TraceConnectWithoutContext("NeighborExpired", MakeCallback(&NeighborhoodAmiSim::NeighborExpired, this));
-		  if ((*it)->GetId() == sender->GetId())
+		  if ((*it)->GetId() == senderIndexList[0])//sender->GetId())
 			{
 			  rp->TraceConnectWithoutContext("RouteComputed", MakeCallback(&NeighborhoodAmiSim::SenderRouteUpdated, this));
 			}
@@ -740,6 +742,20 @@ NeighborhoodAmiSim::ConfigureIpAddressing()
     }
 }
 
+Ptr<Node>
+NeighborhoodAmiSim::GetNodeById(uint32_t id, NodeContainer nodes)
+{
+	for (NodeContainer::Iterator it = nodes.Begin(); it != nodes.End(); it++)
+	{
+		Ptr<Node> meter = *it;
+		if (meter->GetId() == id)
+		{
+			return meter;
+		}
+	}
+
+	return 0;
+}
 void
 NeighborhoodAmiSim::ConfigureMeterApplication(uint16_t port, Time start, Time stop)
 {
@@ -748,7 +764,7 @@ NeighborhoodAmiSim::ConfigureMeterApplication(uint16_t port, Time start, Time st
   ApplicationContainer apps;
   for(int i : senderIndexList)
     {
-      Ptr<Node> sender = meters.Get(i);
+      Ptr<Node> sender = GetNodeById(i, meters);//meters.Get(i);
       if (ddsaEnabled)
 		{
 		  amiHelper.SetAttribute("Retrans", IntegerValue(ddsa_retrans));
@@ -989,83 +1005,17 @@ NeighborhoodAmiSim::GetRandomFailingNode()
   return daps.Get(m_rnd->GetInteger(0, daps.GetN() - 1));
 }
 
-Ptr<Node>
-NeighborhoodAmiSim::GetDdsaFailingNode()
-{
-  Ptr<Node> failingDap = 0;
-
-  if (senderIndexList.size() == 1)
-    {
-      Ptr<DdsaRoutingProtocolAdapter> ddsa = meters.Get(senderIndexList[0])->GetObject<DdsaRoutingProtocolAdapter>();
-      ddsa::Dap bestDap = ddsa->GetBestCostDap();
-
-      if (ddsa)
-		{
-		  if (bestDap.address != Ipv4Address::GetBroadcast())
-			{
-			  for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
-				{
-				  if (bestDap.address == GetIpAddressForOlsrNode(*it))
-					{
-					  failingDap = *it;
-					}
-				}
-			}
-		}
-    }
-
-  if (!failingDap)
-    {
-      failingDap = GetRandomFailingNode();
-    }
-
-
-    return failingDap;
-}
-
-Ptr<Node>
-NeighborhoodAmiSim::GetNonDdsaFailingNode()
-{
-  Ptr<Node> failingDap = 0;
-
-  if (senderIndexList.size() == 1)
-    {
-      Ptr<lqolsr::RoutingProtocol> rp = meters.Get(senderIndexList[0])->GetObject<lqolsr::RoutingProtocol>();
-
-      if (rp)
-		{
-		  Ipv4Address bestDapAddress = rp->GetBestHnaGateway();
-
-		  for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
-			{
-			  if (bestDapAddress == GetIpAddressForOlsrNode(*it))
-				{
-				  failingDap = *it;
-				}
-			}
-		}
-    }
-
-  if (!failingDap)
-    {
-      failingDap = GetRandomFailingNode();
-    }
-
-  return failingDap;
-
-}
-
 void
 NeighborhoodAmiSim::ExecuteFailure()
 {
   Ptr<Node> failingDap = 0;
 
-  failingDap = ddsaEnabled ? GetDdsaFailingNode() : GetNonDdsaFailingNode();
+  failingDap = GetRandomFailingNode();
 
 
   if (!failingDap)
     {
-      failingDap = GetRandomFailingNode();
+      failingDap = failingDapId < 0 ? GetRandomFailingNode() : GetNodeById(failingDapId, daps);
     }
 
   Ptr<ddsa::Ipv4L3ProtocolDdsaAdapter> l3Prot = failingDap->GetObject<ddsa::Ipv4L3ProtocolDdsaAdapter>();
@@ -1390,7 +1340,7 @@ int main (int argc, char *argv[])
   simulation.SheduleFailure(150);
 
   //Log
-  LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_DEBUG);
+  LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_ALL);
   //LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
   //LogComponentEnable("Etx", LOG_LEVEL_DEBUG);
   //LogComponentEnable("MaliciousEtx", LOG_LEVEL_DEBUG);

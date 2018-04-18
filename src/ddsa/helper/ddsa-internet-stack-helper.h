@@ -53,11 +53,13 @@ public:
   DdsaInternetStackHelper &operator = (const DdsaInternetStackHelper &o);
 
   void SetNodeType(ddsa::DdsaRoutingProtocolAdapter::NodeType nt);
+  void SetIpv4L3ProtocolTypeId(std::string tid);
 
 private:
   virtual void InstallIpv4Protocols (Ptr<Node> node) const;
   virtual void InstallIpv4Routing (Ptr<Node> node) const;
   ddsa::DdsaRoutingProtocolAdapter::NodeType nodeType;
+  std::string ipv4l3ProtTypeId;
 
 
 };

@@ -41,100 +41,95 @@ namespace ns3 {
     }
 
     bool
-    Ipv4L3ProtocolDdsaAdapter::ShouldFailMalicious(Ptr<Packet> packet, bool receiveMethod)
+    Ipv4L3ProtocolDdsaAdapter::IsApplicationPacket(Ptr<Packet> packet, bool received)
     {
-      Ipv4Header ipHeader;
-      UdpHeader udpHeader;
-      TcpHeader tcpHeader;
-      ami::AmiHeader amiHeader;
+		Ipv4Header ipHeader;
+		UdpHeader udpHeader;
+		TcpHeader tcpHeader;
+		ami::AmiHeader amiHeader;
 
-      /*
-       * Only received packets have Ip header aggregated. Sent packets hava only the application and the
-       * transport headers
-       */
-      if (receiveMethod)
-	{
-	  packet->RemoveHeader(ipHeader);
+		/*
+		* Only received packets have Ip header aggregated. Sent packets hava only the application and the
+		* transport headers
+		*/
+		if (received)
+		{
+			packet->RemoveHeader(ipHeader);
 
-	  if (ipHeader.GetPayloadSize () < packet->GetSize())
-	  {
-	    packet->RemoveAtEnd (packet->GetSize () - ipHeader.GetPayloadSize ());
-	  }
-	}
+			if (ipHeader.GetPayloadSize () < packet->GetSize())
+			{
+				packet->RemoveAtEnd (packet->GetSize () - ipHeader.GetPayloadSize ());
+			}
+		}
 
-      /*
-       * We only condier application packets using either TCP or UDP transport protocols
-       */
-      if (ipHeader.GetProtocol() == 17)
-	{
-	  packet->RemoveHeader(udpHeader);
-	}
-      else if (ipHeader.GetProtocol() == 6)
-	{
-	  packet->RemoveHeader(tcpHeader);
-	}
-      else
-	{
-	  return false;
-	}
+		/*
+		* We only condier application packets using either TCP or UDP transport protocols
+		*/
+		if (ipHeader.GetProtocol() == 17)
+		{
+			packet->RemoveHeader(udpHeader);
+		}
+		else if (ipHeader.GetProtocol() == 6)
+		{
+			packet->RemoveHeader(tcpHeader);
+		}
+		else
+		{
+			return false;
+		}
 
-      packet->RemoveHeader(amiHeader);
+		packet->RemoveHeader(amiHeader);
 
-      if (amiHeader.GetReadingInfo() == 1)
-	{
-	  return true;
-	}
+		if (amiHeader.GetReadingInfo() == 1)
+		{
+			return true;
+		}
 
-      return false;
+		return false;
     }
+
+    bool
+    Ipv4L3ProtocolDdsaAdapter::ShouldFail(Ptr<Packet> packet, bool received)
+	{
+		bool shouldFail = false;
+
+		if (mustFail)
+		{
+			switch(m_failureType)
+			{
+				case FailureType::FULL: shouldFail = true; break;
+				case FailureType::MALICIOUS: shouldFail = IsApplicationPacket(packet->Copy(), false); break;
+			}
+		}
+
+		return shouldFail;
+	}
 
     void
     Ipv4L3ProtocolDdsaAdapter::Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t protocol, const Address &from,
-					 const Address &to, NetDevice::PacketType packetType)
+					 	 	 	 	 	 const Address &to, NetDevice::PacketType packetType)
     {
-      bool shouldFail = false;
-
-      if (mustFail)
-	{
-	  switch(m_failureType)
-	  {
-	    case FailureType::FULL: shouldFail = true; break;
-	    case FailureType::MALICIOUS: shouldFail = ShouldFailMalicious(p->Copy(), true); break;
-	  }
-	}
-
-      if (!shouldFail)
-	{
-	  Ipv4L3Protocol::Receive(device, p, protocol, from, to, packetType);
-	}
-      else
-	{
-	  NS_LOG_DEBUG("Receiveing: Node is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
-	}
+		if (!ShouldFail(p->Copy(), true))
+		{
+			Ipv4L3Protocol::Receive(device, p, protocol, from, to, packetType);
+		}
+		else
+		{
+			NS_LOG_DEBUG("Receiveing: Node is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
+		}
     }
 
     void
-    Ipv4L3ProtocolDdsaAdapter::Send (Ptr<Packet> packet, Ipv4Address source, Ipv4Address destination, uint8_t protocol,
-				     Ptr<Ipv4Route> route)
+    Ipv4L3ProtocolDdsaAdapter::Send (Ptr<Packet> packet, Ipv4Address source, Ipv4Address destination, uint8_t protocol, Ptr<Ipv4Route> route)
     {
-      bool shouldFail = false;
-      if (mustFail)
-	{
-	  switch(m_failureType)
-	  {
-	    case FailureType::FULL: shouldFail = true; break;
-	    case FailureType::MALICIOUS: shouldFail = ShouldFailMalicious(packet->Copy(), false); break;
-	  }
-	}
-
-      if (!shouldFail)
-	{
-	  Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
-	}
-      else
-	{
-	  NS_LOG_DEBUG("Sending: Node " << source << " is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
-	}
+		if (!ShouldFail(packet->Copy(), false))
+		{
+			Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
+		}
+		else
+		{
+			NS_LOG_DEBUG("Sending: Node " << source << " is failing, so the packet will be discarded!.(t = " << Simulator::Now() << "\n");
+		}
     }
 
     void

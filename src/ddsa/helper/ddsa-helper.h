@@ -49,6 +49,8 @@ public:
 
   DDsaHelper (const TypeId & metricTid);
 
+  DDsaHelper (const TypeId & metricTid, const TypeId & routingProtocolTid);
+
   /**
    * \brief Construct an OlsrHelper from another previously initialized instance
    * (Copy Constructor).

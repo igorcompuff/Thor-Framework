@@ -91,6 +91,8 @@ struct RoutingTableEntry
     Ipv4Address destAddress;
     /// Interface address of the neighbor node.
     const LinkTuple * accessLink;
+    //Number of hops till the destination
+    int hopCount;
   };
 
   static inline bool
@@ -171,6 +173,16 @@ public:
    */
   typedef void (* TableChangeTracedCallback) (uint32_t size);
 
+  // From Ipv4RoutingProtocol
+	virtual Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
+	virtual bool RouteInput (Ptr<const Packet> p,
+							   const Ipv4Header &header,
+							   Ptr<const NetDevice> idev,
+							   UnicastForwardCallback ucb,
+							   MulticastForwardCallback mcb,
+							   LocalDeliverCallback lcb,
+							   ErrorCallback ecb);
+
 private:
   std::set<uint32_t> m_interfaceExclusions; //!< Set of interfaces excluded by OSLR.
   Ptr<Ipv4StaticRouting> m_routingTableAssociation; //!< Associations from an Ipv4StaticRouting instance
@@ -247,16 +259,6 @@ protected:
   Ptr<ns3::lqmetric::LqAbstractMetric> m_metric;
   LqOlsrState m_state;  //!< Internal state with all needed data structs.
   EventGarbageCollector m_events; //!< Running events.
-
-  // From Ipv4RoutingProtocol
-  virtual Ptr<Ipv4Route> RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr);
-  virtual bool RouteInput (Ptr<const Packet> p,
-                             const Ipv4Header &header,
-                             Ptr<const NetDevice> idev,
-                             UnicastForwardCallback ucb,
-                             MulticastForwardCallback mcb,
-                             LocalDeliverCallback lcb,
-                             ErrorCallback ecb);
 
   Ipv4Address GetMyMainAddress();
 
@@ -386,7 +388,8 @@ private:
     void AddLqEntry (const Ipv4Address &dest,
                    const Ipv4Address &next,
                    uint32_t interface,
-                   float cost);
+                   float cost,
+				   uint32_t distance);
 
   /**
    * \brief Adds a new entry into the routing table.
@@ -416,7 +419,8 @@ private:
     void AddLqEntry (const Ipv4Address &dest,
                    const Ipv4Address &next,
                    const Ipv4Address &interfaceAddress,
-                   float cost);
+                   float cost,
+				   uint32_t distance);
 
   /**
    * \brief Adds a new entry into the routing table.

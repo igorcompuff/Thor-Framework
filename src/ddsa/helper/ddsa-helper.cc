@@ -39,6 +39,12 @@ DDsaHelper::DDsaHelper (const TypeId & metricTid)
   m_metricFactory.SetTypeId(metricTid);
 }
 
+DDsaHelper::DDsaHelper (const TypeId & metricTid, const TypeId & routingProtocolTid)
+{
+  m_agentFactory.SetTypeId (routingProtocolTid);
+  m_metricFactory.SetTypeId(metricTid);
+}
+
 DDsaHelper::DDsaHelper (const DDsaHelper &o): LqOlsrHelper(o)
 {
 

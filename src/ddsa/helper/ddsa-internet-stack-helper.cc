@@ -37,6 +37,7 @@ DdsaInternetStackHelper::DdsaInternetStackHelper (): InternetStackHelper()
 
 {
   nodeType = ddsa::DdsaRoutingProtocolAdapter::NodeType::METER;
+  ipv4l3ProtTypeId = "ns3::ddsa::Ipv4L3ProtocolDdsaAdapter";
 }
 
 DdsaInternetStackHelper::~DdsaInternetStackHelper ()
@@ -62,12 +63,17 @@ DdsaInternetStackHelper::SetNodeType(ddsa::DdsaRoutingProtocolAdapter::NodeType 
   nodeType = nt;
 }
 
+void
+DdsaInternetStackHelper::SetIpv4L3ProtocolTypeId(std::string tid)
+{
+	ipv4l3ProtTypeId = tid;
+}
 
 void
 DdsaInternetStackHelper::InstallIpv4Protocols (Ptr<Node> node) const
 {
   CreateAndAggregateObjectFromTypeId (node, "ns3::ArpL3Protocol");
-  CreateAndAggregateObjectFromTypeId (node, "ns3::ddsa::Ipv4L3ProtocolDdsaAdapter");
+  CreateAndAggregateObjectFromTypeId (node, ipv4l3ProtTypeId);
   CreateAndAggregateObjectFromTypeId (node, "ns3::Icmpv4L4Protocol");
 }
 

@@ -273,7 +273,7 @@ namespace ns3 {
     void
 	DdsaRoutingProtocolAdapter::LinkTupleTimerExpire (Ipv4Address neighborIfaceAddr)
     {
-
+    	m_neighborExpiredTrace(neighborIfaceAddr);
     	RoutingProtocol::LinkTupleTimerExpire(neighborIfaceAddr);
     }
 
@@ -372,70 +372,69 @@ namespace ns3 {
 
     void
     DdsaRoutingProtocolAdapter::RoutingTableComputation ()
-    {
-      RoutingProtocol::RoutingTableComputation();
-      ClearDapExclusions();
-      UpdateDapCosts();
-      BuildEligibleGateways();
-
-      if (g_log.IsEnabled(LOG_LEVEL_DEBUG) && GetTotalCurrentEligibleDaps() > 0)
 	{
-	  NS_LOG_DEBUG("Dumping all DAPS.");
-	  Ptr<OutputStreamWrapper> outStream = Create<OutputStreamWrapper>(&std::clog);
-	  PrintDaps(outStream);
-	}
+		RoutingProtocol::RoutingTableComputation();
+		ClearDapExclusions();
+		UpdateDapCosts();
+		BuildEligibleGateways();
 
-      std::vector<Dap> daps;
+		if (g_log.IsEnabled(LOG_LEVEL_DEBUG) && GetTotalCurrentEligibleDaps() > 0)
+		{
+			NS_LOG_DEBUG("Dumping all DAPS.");
+			Ptr<OutputStreamWrapper> outStream = Create<OutputStreamWrapper>(&std::clog);
+			PrintDaps(outStream);
+		}
 
-      for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
-      	{
-      	  daps.push_back(it->second);
-      	}
+		std::vector<Dap> daps;
 
-      m_newRouteComputedTrace(daps, GetMyMainAddress());
+		for (std::map<Ipv4Address, Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
+		{
+			daps.push_back(it->second);
+		}
+
+		m_newRouteComputedTrace(daps, GetMyMainAddress());
     }
 
     Ptr<Ipv4Route>
     DdsaRoutingProtocolAdapter::RouteOutput (Ptr<Packet> p, Ipv4Header &header, Ptr<NetDevice> oif, Socket::SocketErrno &sockerr)
     {
-      Ptr<Ipv4Route> route = 0;
+		Ptr<Ipv4Route> route = 0;
 
-      /*
-       * 1 - The controller is the destination. All packets directed to the controller should be redirected
-       * to the selected DAP, so DDSA should process it.
-       */
-      if (header.GetDestination() == controllerAddress && m_type == NodeType::METER)
-	{
-	  if (m_gateways.size() > 0)
-	  {
-	    Dap selectedDap = SelectDap();
+		/*
+		* 1 - The controller is the destination. All packets directed to the controller should be redirected
+		* to the selected DAP, so DDSA should process it.
+		*/
+		if (header.GetDestination() == controllerAddress && m_type == NodeType::METER)
+		{
+			if (m_gateways.size() > 0)
+			{
+				Dap selectedDap = SelectDap();
 
-	    m_dapSelectionTrace(selectedDap.address, p->Copy());
+				m_dapSelectionTrace(selectedDap.address, p->Copy());
 
-	    header.SetDestination (selectedDap.address);
+				header.SetDestination (selectedDap.address);
 
-	    route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
-	  }
-	  else
-	    {
-	      NS_LOG_DEBUG("No dap available. Trying to find a route.");
+				route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
+			}
+			else
+			{
+				NS_LOG_DEBUG("No dap available. Trying to find a route.");
 
-//	      lqolsr::RoutingTableEntry gatewayEntry;
-//
-//	      route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
-	    }
-	}
-      /*
-       * 2 - In case the destination is not the controller, DDSA does not perform any action in addition to
-       * OLSR.
-       */
-      else
-	{
-	  route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
-	}
+				lqolsr::RoutingTableEntry gatewayEntry;
+				route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
+			}
+		}
+		/*
+		* 2 - In case the destination is not the controller, DDSA does not perform any action in addition to
+		* OLSR.
+		*/
+		else
+		{
+			route = RoutingProtocol::RouteOutput(p, header, oif, sockerr);
+		}
 
 
-      return route;
+		return route;
     }
 
     void

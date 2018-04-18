@@ -18,7 +18,7 @@ namespace lqmetric{
 Etx::Etx()
 {
   etx_memory_length = 32;
-  etx_metric_interval = Seconds(6.0);
+  etx_metric_interval = Seconds(3.0);
   //etx_seqno_restart_detection = 256;
   etx_hello_timeout_factor = 1.5;
   etx_perfect_metric = 1;

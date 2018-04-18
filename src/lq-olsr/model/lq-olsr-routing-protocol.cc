@@ -63,7 +63,7 @@
 /********** Holding times **********/
 
 /// Neighbor holding time.
-#define OLSR_NEIGHB_HOLD_TIME   Time (3 * OLSR_REFRESH_INTERVAL)
+#define OLSR_NEIGHB_HOLD_TIME   Seconds (100)//Time (3 * OLSR_REFRESH_INTERVAL)
 /// Top holding time.
 #define OLSR_TOP_HOLD_TIME      Time (3 * m_tcInterval)
 /// Dup holding time.
@@ -71,7 +71,7 @@
 /// MID holding time.
 #define OLSR_MID_HOLD_TIME      Time (3 * m_midInterval)
 /// HNA holding time.
-#define OLSR_HNA_HOLD_TIME      Time (3 * m_hnaInterval)
+#define OLSR_HNA_HOLD_TIME      Seconds (100)//Time (3 * m_hnaInterval)
 
 /********** Link types **********/
 
@@ -253,7 +253,7 @@ RoutingProtocol::PrintRoutingTable (Ptr<OutputStreamWrapper> stream) const
       << ", Local time: " << GetObject<Node> ()->GetLocalTime ().As (Time::S)
       << ", OLSR Routing table" << std::endl;
 
-  *os << "Destination\t\tNextHop\t\tInterface\tCost\n";
+  *os << "Destination\t\tNextHop\t\tInterface\t\tCost\t\tHops\t\tCost/hop\n";
 
   for (std::map<Ipv4Address, RoutingTableEntry>::const_iterator iter = m_table.begin ();
        iter != m_table.end (); iter++)
@@ -269,7 +269,9 @@ RoutingProtocol::PrintRoutingTable (Ptr<OutputStreamWrapper> stream) const
           *os << iter->second.interface << "\t\t";
         }
 
-      *os << iter->second.cost << "\t";
+      *os << iter->second.cost << "\t\t";
+      *os << iter->second.distance << "\t\t";
+      *os << iter->second.cost / iter->second.distance << "\t\t";
 
       *os << "\n";
     }
@@ -633,77 +635,78 @@ RoutingProtocol::GetMainAddress (Ipv4Address iface_addr) const
 void
 RoutingProtocol::InitializeDestinations()
 {
-  bool mainAddrSelected = false;
+	bool mainAddrSelected = false;
 
-  m_destinations.clear();
-  m_costs.clear();
+	m_destinations.clear();
+	m_costs.clear();
 
-  const NeighborSet &neighborSet = m_state.GetNeighbors ();
-  for (NeighborSet::const_iterator it = neighborSet.begin (); it != neighborSet.end (); it++)
-    {
-      if (it->neighborMainAddr == m_mainAddress)
+	const NeighborSet &neighborSet = m_state.GetNeighbors ();
+	for (NeighborSet::const_iterator it = neighborSet.begin (); it != neighborSet.end (); it++)
 	{
-	  continue;
+		if (it->neighborMainAddr == m_mainAddress)
+		{
+			continue;
+		}
+
+		if (it->status == NeighborTuple::STATUS_SYM)
+		{
+			const LinkSet &linkSet = m_state.GetLinks ();
+
+			bool added = false;
+
+			DestinationTuple dest;
+
+			for (LinkSet::const_iterator it2 = linkSet.begin (); it2 != linkSet.end (); it2++)
+			{
+				if ((GetMainAddress (it2->neighborIfaceAddr) == it->neighborMainAddr) && it2->time >= Simulator::Now ())
+				{
+					dest.destAddress = it2->neighborIfaceAddr;
+					dest.accessLink = &(*it2);
+					dest.hopCount = 1;
+					m_destinations.push_back(dest);
+					m_costs[it2->neighborIfaceAddr] = m_metric->GetCost(it2->neighborIfaceAddr);//it2->cost;
+					NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[it2->neighborIfaceAddr]);
+					added = true;
+				}
+
+				if (it2->neighborIfaceAddr == it->neighborMainAddr)
+				{
+					mainAddrSelected = true;
+				}
+			}
+
+			if (added && !mainAddrSelected)
+			{
+			  DestinationTuple lastAdded = m_destinations.back();
+			  m_costs[it->neighborMainAddr] = m_costs[lastAdded.destAddress];
+			  lastAdded.destAddress = it->neighborMainAddr;
+			  m_destinations.push_back(lastAdded);
+
+			  NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[lastAdded.destAddress]);
+			}
+		}
 	}
 
-      if (it->status == NeighborTuple::STATUS_SYM)
+	const TopologySet &topology = m_state.GetTopologySet ();
+
+	for (TopologySet::const_iterator top = topology.begin (); top != topology.end (); top++)
 	{
-	  const LinkSet &linkSet = m_state.GetLinks ();
+		DestinationTuple dest;
+		dest.destAddress = top->destAddr;
+		dest.accessLink = NULL;
+		dest.hopCount = -1;
 
-	  bool added = false;
+		bool myself = top->destAddr == m_mainAddress;
+		bool alreadyAdded = std::find(m_destinations.begin(), m_destinations.end(), dest) != m_destinations.end();
 
-	  DestinationTuple dest;
+		if (!myself and !alreadyAdded)
+		{
+			m_destinations.push_back(dest);
+			m_costs[top->destAddr] = m_metric->GetInfinityCostValue();
 
-	  for (LinkSet::const_iterator it2 = linkSet.begin (); it2 != linkSet.end (); it2++)
-	  {
-	    if ((GetMainAddress (it2->neighborIfaceAddr) == it->neighborMainAddr) && it2->time >= Simulator::Now ())
-	      {
-		dest.destAddress = it2->neighborIfaceAddr;
-		dest.accessLink = &(*it2);
-		m_destinations.push_back(dest);
-		m_costs[it2->neighborIfaceAddr] = m_metric->GetCost(it2->neighborIfaceAddr);//it2->cost;
-		NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[it2->neighborIfaceAddr]);
-		added = true;
-	      }
-
-	    if (it2->neighborIfaceAddr == it->neighborMainAddr)
-	      {
-		mainAddrSelected = true;
-	      }
-	  }
-
-	  if (added && !mainAddrSelected)
-	    {
-	      DestinationTuple lastAdded = m_destinations.back();
-	      m_costs[it->neighborMainAddr] = m_costs[lastAdded.destAddress];
-	      lastAdded.destAddress = it->neighborMainAddr;
-	      m_destinations.push_back(lastAdded);
-
-	      NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[lastAdded.destAddress]);
-	    }
+			NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[top->destAddr]);
+		}
 	}
-    }
-
-  const TopologySet &topology = m_state.GetTopologySet ();
-
-  for (TopologySet::const_iterator top = topology.begin ();
-      top != topology.end (); top++)
-    {
-	DestinationTuple dest;
-	dest.destAddress = top->destAddr;
-	dest.accessLink = NULL;
-
-	bool myself = top->destAddr == m_mainAddress;
-	bool alreadyAdded = std::find(m_destinations.begin(), m_destinations.end(), dest) != m_destinations.end();
-
-	if (!myself and !alreadyAdded)
-	  {
-	    m_destinations.push_back(dest);
-	    m_costs[top->destAddr] = m_metric->GetInfinityCostValue();
-
-	    NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[top->destAddr]);
-	  }
-    }
 }
 
 int
@@ -732,82 +735,81 @@ RoutingProtocol::GetMinDestination()
 void
 RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple & dest)
 {
+	const TopologySet &topology = m_state.GetTopologySet ();
 
-  const TopologySet &topology = m_state.GetTopologySet ();
-  for (TopologySet::const_iterator top = topology.begin ();
-      top != topology.end (); top++)
-    {
-      DestinationTuple destNeighbor;
-      destNeighbor.destAddress = top->destAddr;
-
-      std::vector<DestinationTuple>::iterator it = std::find(m_destinations.begin(),
-							     m_destinations.end(),
-							     destNeighbor);
-      if (it == m_destinations.end())
+	for (TopologySet::const_iterator top = topology.begin (); top != topology.end (); top++)
 	{
-	  continue;
-	}
+		DestinationTuple destNeighbor;
+		destNeighbor.destAddress = top->destAddr;
 
-      if (top->lastAddr == dest.destAddress)
-	{
-	  float currentCost = m_costs[top->destAddr];
-	  float newCost = m_metric->Compound(m_costs[dest.destAddress], top->cost);
+		std::vector<DestinationTuple>::iterator it = std::find(m_destinations.begin(), m_destinations.end(), destNeighbor);
 
-	  if (m_metric->CompareBest(newCost, currentCost) > 0)
-	    {
-	      m_costs[top->destAddr] = newCost;
-	      it->accessLink = dest.accessLink;
-	    }
+		if (it == m_destinations.end())
+		{
+			continue;
+		}
+
+		if (top->lastAddr == dest.destAddress)
+		{
+			float currentCost = m_costs[top->destAddr];
+			float newCost = m_metric->Compound(m_costs[dest.destAddress], top->cost);
+
+			if (m_metric->CompareBest(newCost, currentCost) > 0)
+			{
+				m_costs[top->destAddr] = newCost;
+				it->accessLink = dest.accessLink;
+				it->hopCount = dest.hopCount + 1;
+			}
+		}
 	}
-    }
 }
 
 void
 RoutingProtocol::RoutingTableComputation ()
 {
-  double now = Simulator::Now ().GetSeconds ();
+	double now = Simulator::Now ().GetSeconds ();
 
-  NS_LOG_DEBUG ("Routing Table Computaion at time " << now << " in node " << m_mainAddress);
+	NS_LOG_DEBUG ("Routing Table Computaion at time " << now << " in node " << m_mainAddress);
 
-  Clear();
+	Clear();
 
-  //Time now = Simulator::Now ();
+	//Time now = Simulator::Now ();
 
-  InitializeDestinations();
+	InitializeDestinations();
 
-  bool done = false;
+	bool done = false;
 
-  while (!done)
-    {
-      int selectedIndex = GetMinDestination();
-
-      if (selectedIndex >= 0)
+	while (!done)
 	{
-	  std::vector<DestinationTuple>::iterator selectedIt = m_destinations.begin() + selectedIndex;
-	  DestinationTuple selectedDest = *selectedIt;
+		int selectedIndex = GetMinDestination();
 
-	  float selectedCost = m_costs[selectedDest.destAddress];
-	  int validCost = m_metric->CompareBest(selectedCost, m_metric->GetInfinityCostValue());
-	  if (selectedDest.accessLink != NULL && validCost > 0)
-	    {
-	      AddLqEntry(selectedDest.destAddress, selectedDest.accessLink->neighborIfaceAddr,
-			 selectedDest.accessLink->localIfaceAddr,
-			 m_costs[selectedDest.destAddress]);
+		if (selectedIndex >= 0)
+		{
+			std::vector<DestinationTuple>::iterator selectedIt = m_destinations.begin() + selectedIndex;
+			DestinationTuple selectedDest = *selectedIt;
 
-	      m_destinations.erase(selectedIt);
+			float selectedCost = m_costs[selectedDest.destAddress];
+			int validCost = m_metric->CompareBest(selectedCost, m_metric->GetInfinityCostValue());
+			if (selectedDest.accessLink != NULL && validCost > 0)
+			{
+				AddLqEntry(selectedDest.destAddress, selectedDest.accessLink->neighborIfaceAddr,
+				selectedDest.accessLink->localIfaceAddr,
+				m_costs[selectedDest.destAddress], selectedDest.hopCount);
 
-	      UpdateDestinationNeighbors(selectedDest);
-	    }
-	  else
-	    {
-	      done = true;
-	    }
+				m_destinations.erase(selectedIt);
+
+				UpdateDestinationNeighbors(selectedDest);
+			}
+			else
+			{
+				done = true;
+			}
+		}
+		else
+		{
+			done = true;
+		}
 	}
-      else
-	{
-	  done = true;
-	}
-    }
 
     // For each entry in the multiple interface association base
     // where there exists a routing entry such that:
@@ -2530,7 +2532,7 @@ RoutingProtocol::AssociationTupleTimerExpire (Ipv4Address gatewayAddr, Ipv4Addre
   if (tuple->expirationTime < Simulator::Now ())
     {
       RemoveAssociationTuple (*tuple);
-      //NS_LOG_DEBUG("DAP " << gatewayAddr << " Expired");
+      NS_LOG_DEBUG("DAP " << gatewayAddr << " Expired");
     }
   else
     {
@@ -2837,7 +2839,8 @@ void
 RoutingProtocol::AddLqEntry (Ipv4Address const &dest,
                            Ipv4Address const &next,
                            uint32_t interface,
-                           float cost)
+                           float cost,
+						   uint32_t distance)
 {
   NS_LOG_FUNCTION (this << dest << next << interface << cost << m_mainAddress);
 
@@ -2847,7 +2850,7 @@ RoutingProtocol::AddLqEntry (Ipv4Address const &dest,
   entry.destAddr = dest;
   entry.nextAddr = next;
   entry.interface = interface;
-  entry.distance = 0;
+  entry.distance = distance;
   entry.cost = cost;
 }
 
@@ -2874,15 +2877,15 @@ void
 RoutingProtocol::AddLqEntry (Ipv4Address const &dest,
                            Ipv4Address const &next,
                            Ipv4Address const &interfaceAddress,
-                           float cost)
+                           float cost,
+						   uint32_t distance)
 {
   NS_LOG_FUNCTION (this << dest << next << interfaceAddress << cost << m_mainAddress);
 
   NS_ASSERT (m_ipv4);
 
-  RoutingTableEntry entry;
   uint32_t intId = GetInterfaceNumberByAddress(interfaceAddress);
-  AddLqEntry (dest, next, intId, cost);
+  AddLqEntry (dest, next, intId, cost, distance);
 }
 
 void
