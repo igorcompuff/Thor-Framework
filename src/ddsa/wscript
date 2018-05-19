@@ -9,11 +9,6 @@
 def build(bld):
     module = bld.create_ns3_module('ddsa', ['lq-olsr', 'ami'])
     module.source = [
-        'model/ddsa-routing-protocol-adapter.cc',
-        'model/ipv4-l3-protocol-ddsa-adapter.cc',
-        'model/smart-ddsa-routing-protocol-adapter.cc',
-        'model/ipv4-l3-protocol-smartddsa-adapter.cc',
-        'model/malicious-lq-routing-protocol.cc',
         'model/util/dap.cc',
         'model/meters/rp/ddsa-routing-protocol-base.cc',
         'model/meters/rp/global-retrans-ddsa-routing-protocol-base.cc',
@@ -36,11 +31,6 @@ def build(bld):
     headers = bld(features='ns3header')
     headers.module = 'ddsa'
     headers.source = [
-        'model/ddsa-routing-protocol-adapter.h',
-        'model/ipv4-l3-protocol-ddsa-adapter.h',
-        'model/smart-ddsa-routing-protocol-adapter.h',
-        'model/ipv4-l3-protocol-smartddsa-adapter.h',
-        'model/malicious-lq-routing-protocol.h',
         'model/util/dap.h',
         'model/meters/rp/ddsa-routing-protocol-base.h',
         'model/meters/rp/global-retrans-ddsa-routing-protocol-base.h',
