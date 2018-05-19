@@ -37,6 +37,8 @@ namespace ns3 {
 			private:
 				bool mustFail;
 				FailureType m_failureType;
+				/// and will be changed to \c Ptr<const Ipv4> in a future release.
+				TracedCallback<Ptr<const Packet>, Ptr<Ipv4>, uint32_t> m_receivedTrace;
 		};
 
 	}

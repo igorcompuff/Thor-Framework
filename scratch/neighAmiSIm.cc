@@ -19,6 +19,7 @@
 #include "ns3/ddsa-routing-protocol-adapter.h"
 #include "ns3/integer.h"
 #include "ns3/simple-header.h"
+#include "ns3/dap.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -160,6 +161,7 @@ class NeighborhoodAmiSim
     void ExecuteFailure();
     void GenerateDapStatistics();
     void GenerateControllerReceptionStatistics();
+    void PopulateArpCache();
 
     bool IsDdsaEnabled()
     {
@@ -211,6 +213,8 @@ class NeighborhoodAmiSim
     int GetTotalSentCopies();
     void ParseSenders();
     Ptr<Node> GetNodeById(uint32_t id, NodeContainer nodes);
+    void PacketSent(Ptr<const Packet> packet, Ipv4Address dest, Ipv4Address gateway);
+    Ptr<ArpCache> CreatePopulatedArpCache(NodeContainer nodes);
 
     std::string phyMode;
     bool withFailure;
@@ -620,6 +624,78 @@ NeighborhoodAmiSim::ConfigureDapStack(LqOlsrHelper & helper)
 	}
 }
 
+Ptr<ArpCache>
+NeighborhoodAmiSim::CreatePopulatedArpCache(NodeContainer nodes)
+{
+	Ptr<ArpCache> arpCache = CreateObject<ArpCache> ();
+
+	for (NodeContainer::Iterator it = nodes.Begin(); it != nodes.End(); ++it)
+	{
+		Ptr<Ipv4L3Protocol> ip = (*it)->GetObject<Ipv4L3ProtocolDdsaAdapter> ();
+
+		if (ip == 0)
+		{
+			ip = (*it)->GetObject<Ipv4L3Protocol> ();
+		}
+
+
+		NS_ASSERT(ip !=0);
+
+		for (uint32_t interface = 0; interface < ip->GetNInterfaces(); interface++)
+		{
+			Ptr<Ipv4Interface> ipIface = ip->GetInterface(interface);
+			NS_ASSERT(ipIface != 0);
+			Ptr<NetDevice> device = ipIface->GetDevice();
+			NS_ASSERT(device != 0);
+			Mac48Address macaddr = Mac48Address::ConvertFrom(device->GetAddress ());
+
+			for(uint32_t i = 0; i < ipIface->GetNAddresses (); i ++)
+			{
+				Ipv4Address ipAddr = ipIface->GetAddress (i).GetLocal();
+
+				if(ipAddr != Ipv4Address::GetLoopback())
+				{
+					ArpCache::Entry * entry = arpCache->Add(ipAddr);
+					entry->SetMacAddresss(macaddr);
+					entry->MarkPermanent();
+				}
+			}
+		}
+	}
+
+	return arpCache;
+}
+
+void
+NeighborhoodAmiSim::PopulateArpCache()
+{
+	NodeContainer nodes;
+	nodes.Add(meters);
+	nodes.Add(daps);
+	nodes.Add(controllers);
+
+	Ptr<ArpCache> arpcache = CreatePopulatedArpCache(nodes);
+
+	for (NodeContainer::Iterator it = nodes.Begin(); it != nodes.End(); ++it)
+	{
+		Ptr<Ipv4L3Protocol> ip = (*it)->GetObject<Ipv4L3ProtocolDdsaAdapter> ();
+
+		if (ip == 0)
+		{
+			ip = (*it)->GetObject<Ipv4L3Protocol> ();
+		}
+
+
+		NS_ASSERT(ip !=0);
+
+		for (uint32_t interface = 0; interface < ip->GetNInterfaces(); interface++)
+		{
+			Ptr<Ipv4Interface> ipIface = ip->GetInterface(interface);
+			ipIface->SetArpCache(arpcache);
+		}
+	}
+}
+
 void
 NeighborhoodAmiSim::ConfigureMeterStack(LqOlsrHelper & helper)
 {
@@ -633,6 +709,7 @@ NeighborhoodAmiSim::ConfigureMeterStack(LqOlsrHelper & helper)
       for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
 		{
 		  Ptr<ns3::ddsa::DdsaRoutingProtocolAdapter> rp = (*it)->GetObject<ddsa::DdsaRoutingProtocolAdapter>();
+		  Ptr<ns3::ddsa::Ipv4L3ProtocolDdsaAdapter> ipv3 = (*it)->GetObject<ddsa::Ipv4L3ProtocolDdsaAdapter>();
 		  NS_ASSERT (rp);
 		  rp->TraceConnectWithoutContext("DapSelection", MakeCallback(&NeighborhoodAmiSim::DapSelectedToNewCopy, this));
 		  rp->TraceConnectWithoutContext("NeighborExpired", MakeCallback(&NeighborhoodAmiSim::NeighborExpired, this));
@@ -640,6 +717,12 @@ NeighborhoodAmiSim::ConfigureMeterStack(LqOlsrHelper & helper)
 			{
 			  rp->TraceConnectWithoutContext("RouteComputed", MakeCallback(&NeighborhoodAmiSim::SenderRouteUpdated, this));
 			}
+
+		  for (uint32_t i = 0; i < ipv3->GetNInterfaces(); i++)
+		  {
+			  Ptr<Ipv4Interface> interface = ipv3->GetInterface(i);
+			  interface->TraceConnectWithoutContext("InterfaceTx", MakeCallback(&NeighborhoodAmiSim::PacketSent, this));
+		  }
 		}
      }
 }
@@ -821,11 +904,11 @@ NeighborhoodAmiSim::SenderRouteUpdated(std::vector<ddsa::Dap> daps, const Ipv4Ad
 
   for(std::vector<ddsa::Dap>::iterator it = daps.begin(); it != daps.end(); it++)
     {
-      NS_LOG_UNCOND("DAP " << it->address << " updated: " << it->cost << " at " << Simulator::Now().GetSeconds());
+      NS_LOG_UNCOND("DAP " << it->GetAddress() << " updated: " << it->GetCost() << " at " << Simulator::Now().GetSeconds());
 
       if (daps.size() == this->daps.GetN() && senderIndexList.size() == 1)
 		{
-		  costHistory[it->address].push_back(*it);
+		  costHistory[it->GetAddress()].push_back(*it);
 		}
     }
 }
@@ -956,6 +1039,37 @@ NeighborhoodAmiSim::ControllerReceivePacket (Ptr<Socket> socket)
 }
 
 void
+NeighborhoodAmiSim::PacketSent(Ptr<const Packet> packet, Ipv4Address dest, Ipv4Address gateway)
+{
+	Ipv4Header ipHeader;
+	UdpHeader udpHeader;
+	AmiHeader amiHeader;
+
+	std::list<Ipv4Header> header;
+
+	header.size();
+
+	Ptr<Packet> packetCopy = packet->Copy();
+	packetCopy->RemoveHeader(ipHeader);
+	packetCopy->RemoveHeader(udpHeader);
+
+	packetCopy->PeekHeader(amiHeader);
+
+	if (amiHeader.GetReadingInfo() == 1)
+	{
+		uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+		uint16_t meterId = amiHeader.GetNodeId();
+
+		NS_LOG_UNCOND ("Packet " << seqNumber << " sent by " << meterId << " - Destination: " << dest << ", Next Hop " << gateway << "\n");
+	}
+	else
+	{
+		NS_LOG_UNCOND ("PacketSent Error");
+	}
+
+}
+
+void
 NeighborhoodAmiSim::DapSelectedToNewCopy(const Ipv4Address & dapAddress, Ptr<Packet> packet)
 {
   UdpHeader udp;
@@ -1033,7 +1147,7 @@ NeighborhoodAmiSim::ExecuteFailure()
 		Ptr<ddsa::DdsaRoutingProtocolAdapter> rp = failingDap->GetObject<ddsa::DdsaRoutingProtocolAdapter>();
 		if (rp)
 		  {
-			rp->SetMalicious(true);
+			rp->StartMalicious();
 		  }
       }
 }
@@ -1138,7 +1252,7 @@ NeighborhoodAmiSim::CalculateMeanCost(const Ipv4Address & dapAddress)
       double sum = 0;
       for(std::vector<ddsa::Dap>::iterator it = costs.begin(); it != costs.end(); it++)
 		{
-		  sum+= it->cost;
+		  sum+= it->GetCost();
 		}
 
       return sum / costs.size();
@@ -1180,7 +1294,7 @@ NeighborhoodAmiSim::CalculateMeanProbability(const Ipv4Address & dapAddress)
       double sum = 0;
       for(std::vector<ddsa::Dap>::iterator it = costs.begin(); it != costs.end(); it++)
 		{
-		  sum+= it->probability;
+		  sum+= it->GetProbability();
 		}
 
       return sum / costs.size();
@@ -1329,6 +1443,7 @@ int main (int argc, char *argv[])
   simulation.CreateControllerLan();
   simulation.ConfigureNodesStack();
   simulation.ConfigureIpAddressing();
+  simulation.PopulateArpCache();
 
   uint16_t port = 80;
   Time metersStart = Seconds(100.0);
@@ -1340,13 +1455,16 @@ int main (int argc, char *argv[])
   simulation.SheduleFailure(150);
 
   //Log
-  LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_ALL);
+  //LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_ALL);
   //LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
   //LogComponentEnable("Etx", LOG_LEVEL_DEBUG);
   //LogComponentEnable("MaliciousEtx", LOG_LEVEL_DEBUG);
   //LogComponentEnable("YansWifiPhy", LOG_LEVEL_DEBUG);
   //LogComponentEnable("Ipv4L3ProtocolDdsaAdapter", LOG_LEVEL_DEBUG);
   //LogComponentEnable("Ipv4L3Protocol", LOG_LEVEL_ALL);
+
+  //LogComponentEnable("ArpL3Protocol", LOG_LEVEL_LOGIC);
+
 
   Simulator::Stop (Seconds (250.0));
   Simulator::Run ();

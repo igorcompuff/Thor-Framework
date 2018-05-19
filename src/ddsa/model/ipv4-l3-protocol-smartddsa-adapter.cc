@@ -40,7 +40,7 @@ namespace ns3 {
     {
 		if (!ShouldFail(packet->Copy(), false))
 		{
-			Ptr<SmartDdsaRoutingProtocolAdapter> rp = DynamicCast<SmartDdsaRoutingProtocolAdapter>(this->GetRoutingProtocol());
+			Ptr<SmartDdsaRoutingProtocolAdapter> rp = GetMyNode()->GetObject<SmartDdsaRoutingProtocolAdapter>();//DynamicCast<Ipv4ListRouting>(this->GetRoutingProtocol());
 
 			if (rp)
 			{
@@ -60,13 +60,13 @@ namespace ns3 {
 
 						Socket::SocketErrno errno_;
 
-						Ptr<Ipv4Route> route = rp->RouteOutput(packet, header, 0, errno_);
+						Ptr<Ipv4Route> newroute = rp->RouteOutput(packet, header, 0, errno_);
 
-						if (route != 0)
+						if (newroute != 0)
 						{
 							for (int i = 0; i < selectedDap.totalCopies; i++)
 							{
-								Ipv4L3Protocol::Send(packet, source, destination, protocol, route);
+								Ipv4L3Protocol::Send(packet, source, selectedDap.address, protocol, newroute);
 							}
 						}
 					}
@@ -80,8 +80,6 @@ namespace ns3 {
 			{
 				NS_LOG_DEBUG("There is no routing protocol: Not sending" << "\n");
 			}
-
-
 		}
 		else
 		{

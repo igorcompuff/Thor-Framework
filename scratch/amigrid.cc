@@ -19,6 +19,7 @@
 #include "ns3/ddsa-routing-protocol-adapter.h"
 #include "ns3/integer.h"
 #include "ns3/simple-header.h"
+#include "ns3/dap.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -786,7 +787,7 @@ AmiGridSim::SenderRouteUpdated(std::vector<ddsa::Dap> daps, const Ipv4Address & 
 
   for(std::vector<ddsa::Dap>::iterator it = daps.begin(); it != daps.end(); it++)
     {
-      NS_LOG_UNCOND("DAP " << it->address << " updated: " << it->cost << " at " << Simulator::Now().GetSeconds());
+      NS_LOG_UNCOND("DAP " << it->GetAddress() << " updated: " << it->GetCost() << " at " << Simulator::Now().GetSeconds());
 
 //      if (!it->excluded)
 //	{
@@ -794,7 +795,7 @@ AmiGridSim::SenderRouteUpdated(std::vector<ddsa::Dap> daps, const Ipv4Address & 
 //	}
       if (daps.size() == this->daps.GetN() && senderIndexList.size() == 1)
 	{
-	  costHistory[it->address].push_back(*it);
+	  costHistory[it->GetAddress()].push_back(*it);
 	}
     }
 
@@ -1017,11 +1018,11 @@ AmiGridSim::GetDdsaFailingNode()
 
       if (ddsa)
 	{
-	  if (bestDap.address != Ipv4Address::GetBroadcast())
+	  if (bestDap.GetAddress() != Ipv4Address::GetBroadcast())
 	    {
 	      for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
 		{
-		  if (bestDap.address == GetIpAddressForOlsrNode(*it))
+		  if (bestDap.GetAddress() == GetIpAddressForOlsrNode(*it))
 		    {
 		      failingDap = *it;
 		    }
@@ -1102,7 +1103,7 @@ AmiGridSim::ExecuteFailure()
 	Ptr<ddsa::DdsaRoutingProtocolAdapter> rp = failingDap->GetObject<ddsa::DdsaRoutingProtocolAdapter>();
 	if (rp)
 	  {
-	    rp->SetMalicious(true);
+	    rp->StartMalicious();
 	  }
       }
 }
@@ -1224,7 +1225,7 @@ AmiGridSim::CalculateMeanCost(const Ipv4Address & dapAddress)
       double sum = 0;
       for(std::vector<ddsa::Dap>::iterator it = costs.begin(); it != costs.end(); it++)
 	{
-	  sum+= it->cost;
+	  sum+= it->GetCost();
 	}
 
       return sum / costs.size();
@@ -1266,7 +1267,7 @@ AmiGridSim::CalculateMeanProbability(const Ipv4Address & dapAddress)
       double sum = 0;
       for(std::vector<ddsa::Dap>::iterator it = costs.begin(); it != costs.end(); it++)
 	{
-	  sum+= it->probability;
+	  sum+= it->GetProbability();
 	}
 
       return sum / costs.size();

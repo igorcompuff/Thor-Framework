@@ -341,11 +341,12 @@ ArpL3Protocol::Lookup (Ptr<Packet> packet, const Ipv4Header & ipHeader, Ipv4Addr
   else
     {
       // This is our first attempt to transmit data to this destination.
-      NS_LOG_LOGIC ("node="<<m_node->GetId ()<<
-                    ", no entry for " << destination << " -- send arp request");
+      double jitter = m_requestJitter->GetValue ();
+	  NS_LOG_LOGIC ("node="<<m_node->GetId ()<<
+                    ", no entry for " << destination << " -- send arp request after " << jitter << "ms");
       entry = cache->Add (destination);
       entry->MarkWaitReply (ArpCache::Ipv4PayloadHeaderPair (packet, ipHeader));
-      Simulator::Schedule (Time (MilliSeconds (m_requestJitter->GetValue ())), &ArpL3Protocol::SendArpRequest, this, cache, destination);
+      Simulator::Schedule (Time (MilliSeconds (jitter)), &ArpL3Protocol::SendArpRequest, this, cache, destination);
     }
   return false;
 }

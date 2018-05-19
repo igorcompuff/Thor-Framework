@@ -1,6 +1,5 @@
 #include "ns3/log.h"
 #include "ami-app.h"
-#include "ns3/simple-header.h"
 #include "ns3/udp-socket-factory.h"
 #include "ns3/socket.h"
 #include "ns3/simulator.h"
@@ -89,7 +88,8 @@ void AmiApplication::StopApplication () // Called at time specified by Stop
 {
   NS_LOG_FUNCTION (this);
 
-  Simulator::Cancel(m_sendEvent);
+  Simulator::Cancel(m_packetSentEvent);
+  Simulator::Cancel(m_copySentEvent);
 
   if(m_socket != 0)
     {
@@ -102,11 +102,29 @@ void AmiApplication::StopApplication () // Called at time specified by Stop
 }
 
 void
+AmiApplication::SendCopy (Ptr<Packet> packet, ami::AmiHeader header, int count)
+{
+	NS_ASSERT (m_copySentEvent.IsExpired ());
+	m_socket->Send (packet);
+	m_txTrace (packet);
+	NS_LOG_DEBUG("(" << Simulator::Now().GetSeconds() << ") Sent packet copy " << header.GetPacketSequenceNumber());
+
+	if (--count > 0)
+	{
+		m_copySentEvent = Simulator::Schedule (MilliSeconds(11), &AmiApplication::SendCopy, this, packet, header, count);
+	}
+	else
+	{
+		m_packetSentEvent = Simulator::Schedule (Seconds(3), &AmiApplication::SendPacket, this);
+	}
+}
+
+void
 AmiApplication::SendPacket ()
 {
   NS_LOG_FUNCTION (this);
 
-  NS_ASSERT (m_sendEvent.IsExpired ());
+  NS_ASSERT (m_packetSentEvent.IsExpired ());
   Ptr<Packet> packet = Create<Packet> ();
 
   ami::AmiHeader header;
@@ -116,14 +134,7 @@ AmiApplication::SendPacket ()
 
   packet->AddHeader(header);
 
-  for (int i = 1; i<= (m_nRetransmissions + 1); i++)
-    {
-      m_socket->Send (packet);
-      m_txTrace (packet);
-      NS_LOG_DEBUG("(" << Simulator::Now().GetSeconds() << ") Sent packet copy " << header.GetPacketSequenceNumber());
-    }
-
-  m_sendEvent = Simulator::Schedule (Seconds(3), &AmiApplication::SendPacket, this);
+  SendCopy(packet, header, m_nRetransmissions + 1);
 }
 
 int64_t

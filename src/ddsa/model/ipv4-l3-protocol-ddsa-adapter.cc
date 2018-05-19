@@ -111,6 +111,17 @@ namespace ns3 {
     {
 		if (!ShouldFail(p->Copy(), true))
 		{
+			if (IsApplicationPacket(p->Copy(), true))
+			{
+				Ptr<Packet> pCopy = p->Copy();
+				Ipv4Header ipHeader;
+				UdpHeader udpHeader;
+
+				pCopy->RemoveHeader(ipHeader);
+				pCopy->RemoveHeader(udpHeader);
+
+				m_receivedTrace(pCopy, GetMyNode()->GetObject<Ipv4> (), GetInterfaceForDevice(device));
+			}
 			Ipv4L3Protocol::Receive(device, p, protocol, from, to, packetType);
 		}
 		else

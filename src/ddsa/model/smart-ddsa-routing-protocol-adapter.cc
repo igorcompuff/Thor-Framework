@@ -25,7 +25,7 @@ namespace ns3 {
 	SmartDdsaRoutingProtocolAdapter::GetTypeId (void)
     {
       static TypeId tid = TypeId ("ns3::ddsa::SmartDdsaRoutingProtocolAdapter")
-        .SetParent<RoutingProtocol> ()
+        .SetParent<MaliciousLqRoutingProtocol> ()
         .SetGroupName ("Ddsa")
         .AddConstructor<SmartDdsaRoutingProtocolAdapter> ()
         .AddAttribute ("Alpha", "The Alpha value used in the DAP exclusion algorithm",
@@ -48,7 +48,6 @@ namespace ns3 {
       m_rnd->SetAttribute("Max", DoubleValue(1));
       controllerAddress = Ipv4Address::GetBroadcast();
       m_type = NodeType::METER;
-      malicious = false;
     }
 
     SmartDdsaRoutingProtocolAdapter::~SmartDdsaRoutingProtocolAdapter(){}
@@ -183,6 +182,7 @@ namespace ns3 {
 				gw.expirationTime = now + msg.GetVTime();
 				gw.cost = entry1.cost;
 				gw.totalCopies = entry1.cost / entry1.distance;
+				gw.hops = entry1.distance;
 				m_gateways[dapAddress] = gw;
 
 				NS_LOG_DEBUG("DAP " << dapAddress << " is now a possible gateway");
@@ -204,7 +204,7 @@ namespace ns3 {
     void
 	SmartDdsaRoutingProtocolAdapter::SendTc()
     {
-		if (m_type == NodeType::DAP && !malicious)
+		if (m_type == NodeType::DAP && !IsMalicious())
 		{
 			return;
 		}
@@ -227,6 +227,7 @@ namespace ns3 {
 			{
 				it->second.cost = rEntry.cost;
 				it->second.totalCopies = rEntry.cost / rEntry.distance;
+				it->second.hops = rEntry.distance;
 				it++;
 			}
 			else
@@ -323,34 +324,6 @@ namespace ns3 {
 	SmartDdsaRoutingProtocolAdapter::GetNodeType()
     {
     	return m_type;
-    }
-
-    float
-	SmartDdsaRoutingProtocolAdapter::GetCostToTcSend(lqolsr::LinkTuple *link_tuple)
-    {
-    	return malicious ? 1.0f : RoutingProtocol::GetCostToTcSend(link_tuple);
-    }
-
-    uint32_t
-	SmartDdsaRoutingProtocolAdapter::GetHelloInfoToSendHello(Ipv4Address neiAddress)
-    {
-		uint32_t info;
-		if (malicious)
-		{
-			info = pack754_32(1.0f);
-		}
-		else
-		{
-			info = RoutingProtocol::GetHelloInfoToSendHello(neiAddress);
-		}
-
-		return info;
-    }
-
-    void
-	SmartDdsaRoutingProtocolAdapter::SetMalicious(bool mal)
-    {
-    	malicious = mal;
     }
 
   }

@@ -188,9 +188,14 @@ public:
    */
   Ipv4InterfaceAddress RemoveAddress (Ipv4Address address);
 
+  typedef void (* TxRxTracedCallback) (Ptr<const Packet> packet, Ipv4Address dest, Ipv4Address gateway);
+
 protected:
   virtual void DoDispose (void);
 private:
+
+	TracedCallback<Ptr<const Packet>, Ipv4Address, Ipv4Address> m_txTrace;
+
   /**
    * \brief Initialize interface.
    */

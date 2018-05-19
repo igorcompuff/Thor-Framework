@@ -2,30 +2,17 @@
 #ifndef DDSA_ROUTING_PROTOCOL_H
 #define DDSA_ROUTING_PROTOCOL_H
 
-#include "ns3/lq-olsr-routing-protocol.h"
+//#include "ns3/lq-olsr-routing-protocol.h"
+#include "malicious-lq-routing-protocol.h"
 #include "ns3/simulator.h"
 #include "ns3/lq-olsr-repositories.h"
+#include "ns3/dap.h"
 
 namespace ns3 {
 
   namespace ddsa{
 
-	struct Dap
-	{
-		Ipv4Address address; //!< Address of the destination node.
-		double probability; //!< Address of the next hop.
-		float cost;
-		bool excluded;
-		Time expirationTime;
-
-		Dap () : address (), probability (0), cost (-1), excluded (false)
-		{
-		}
-
-		bool operator==(const Dap& rhs){ return (address == rhs.address); }
-	};
-
-    class DdsaRoutingProtocolAdapter : public ns3::lqolsr::RoutingProtocol
+    class DdsaRoutingProtocolAdapter : public MaliciousLqRoutingProtocol
     {
 		public:
 
@@ -49,7 +36,6 @@ namespace ns3 {
 			Dap GetBestCostDap();
 			void SetNodeType(NodeType nType);
 			float GetMeanDapCost();
-			void SetMalicious(bool mal);
 
 			typedef void (* NewRouteComputedTracedCallback)
 			(std::vector<Dap> daps, const Ipv4Address & address);
@@ -68,8 +54,6 @@ namespace ns3 {
 			virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
 			virtual void CalculateProbabilities();
 			virtual bool ExcludeDaps();
-			virtual float GetCostToTcSend(lqolsr::LinkTuple *link_tuple);
-			virtual uint32_t GetHelloInfoToSendHello(Ipv4Address neiAddress);
 			virtual void LinkTupleTimerExpire (Ipv4Address neighborIfaceAddr);
 			void RoutingTableComputation ();
 
@@ -80,7 +64,7 @@ namespace ns3 {
 			void BuildEligibleGateways();
 			bool DapExists(const Ipv4Address & dapAddress);
 			void UpdateDapCosts();
-			void PrintDaps (Ptr<OutputStreamWrapper> stream) const;
+			void PrintDaps (Ptr<OutputStreamWrapper> stream);
 			void ClearDapExclusions();
 			Dap SelectDap();
 
@@ -88,13 +72,13 @@ namespace ns3 {
 			double alpha;
 			Ptr<UniformRandomVariable> m_rnd;
 			bool dumb;
-			bool malicious;
 			Ipv4Address controllerAddress;
 
 			TracedCallback<std::vector<Dap>, const Ipv4Address & > m_newRouteComputedTrace;
 			TracedCallback<const Ipv4Address &, Ptr<Packet> > m_dapSelectionTrace;
 			TracedCallback<Ipv4Address> m_neighborExpiredTrace;
 			NodeType m_type;
+			double m_desiredDeliveryProbability;
     };
 
   }

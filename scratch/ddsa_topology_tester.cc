@@ -18,6 +18,7 @@
 #include "ns3/ipv4-l3-protocol-ddsa-adapter.h"
 #include "ns3/integer.h"
 #include "ns3/simple-header.h"
+#include "ns3/dap.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -475,7 +476,7 @@ DdsaTopologyTest::SenderRouteUpdated(std::vector<ddsa::Dap> daps)
     {
       for(std::vector<ddsa::Dap>::iterator it = daps.begin(); it != daps.end(); it++)
 	{
-	  costHistory[it->address].push_back(*it);
+	  costHistory[it->GetAddress()].push_back(*it);
 	}
     }
 }
@@ -489,7 +490,7 @@ DdsaTopologyTest::CalculateMeanCost(const Ipv4Address & dapAddress)
       double sum = 0;
       for(std::vector<ddsa::Dap>::iterator it = costs.begin(); it != costs.end(); it++)
 	{
-	  sum+= it->cost;
+	  sum+= it->GetCost();
 	}
 
       return sum / costs.size();

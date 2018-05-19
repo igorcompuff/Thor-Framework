@@ -80,10 +80,14 @@ DdsaInternetStackHelper::InstallIpv4Protocols (Ptr<Node> node) const
 void
 DdsaInternetStackHelper::InstallIpv4Routing(Ptr<Node> node) const
 {
-  InternetStackHelper::InstallIpv4Routing(node);
+	InternetStackHelper::InstallIpv4Routing(node);
 
-  Ptr<ns3::ddsa::DdsaRoutingProtocolAdapter> rp = node->GetObject<ns3::ddsa::DdsaRoutingProtocolAdapter>();
-  rp->SetNodeType(nodeType);
+//	Ptr<ns3::ddsa::DdsaRoutingProtocolAdapter> rp = node->GetObject<ns3::ddsa::DdsaRoutingProtocolAdapter>();
+//	if (rp)
+//	{
+//		rp->SetNodeType(nodeType);
+//	}
+
 }
 
 } // namespace ns3

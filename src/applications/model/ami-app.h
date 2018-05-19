@@ -32,6 +32,7 @@
 #include "ns3/data-rate.h"
 #include "ns3/traced-callback.h"
 #include "ns3/random-variable-stream.h"
+#include "ns3/simple-header.h"
 
 namespace ns3 {
 
@@ -68,7 +69,8 @@ class AmiApplication : public Application
     Ptr<Socket> m_socket;       //!< Associated socket
     Address m_peer;         //!< Peer address
     TypeId m_socketTid;
-    EventId m_sendEvent;
+    EventId m_packetSentEvent;
+    EventId m_copySentEvent;
     Ptr<UniformRandomVariable> m_rnd;
     TracedCallback<Ptr<const Packet> > m_txTrace;
     int m_nRetransmissions;
@@ -78,6 +80,7 @@ class AmiApplication : public Application
     // inherited from Application base class.
     virtual void StartApplication (void);    // Called at time specified by Start
     virtual void StopApplication (void);     // Called at time specified by Stop
+    void SendCopy (Ptr<Packet> packet, ami::AmiHeader header, int count);
 };
 
 } // namespace ns3

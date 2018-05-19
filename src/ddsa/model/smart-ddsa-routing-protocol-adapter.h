@@ -2,7 +2,8 @@
 #ifndef SMART_DDSA_ROUTING_PROTOCOL_H
 #define SMART_DDSA_ROUTING_PROTOCOL_H
 
-#include "ns3/lq-olsr-routing-protocol.h"
+//#include "ns3/lq-olsr-routing-protocol.h"
+#include "malicious-lq-routing-protocol.h"
 #include "ns3/simulator.h"
 #include "ns3/lq-olsr-repositories.h"
 
@@ -17,6 +18,7 @@ namespace ns3 {
 			bool excluded;
 			Time expirationTime;
 			int totalCopies;
+			int hops;
 	
 			SmartDap ()
 			{
@@ -24,13 +26,14 @@ namespace ns3 {
 				totalCopies = 0;
 				cost = -1;
 				excluded = false;
+				hops = 0;
 			}
 	
 			bool operator==(const SmartDap& rhs){ return (address == rhs.address); }
 		};
 
 
-		class SmartDdsaRoutingProtocolAdapter : public ns3::lqolsr::RoutingProtocol
+		class SmartDdsaRoutingProtocolAdapter : public MaliciousLqRoutingProtocol
 		{
 			public:
 
@@ -55,7 +58,6 @@ namespace ns3 {
 				void SetNodeType(NodeType nType);
 				NodeType GetNodeType();
 				float GetMeanDapCost();
-				void SetMalicious(bool mal);
 				std::vector<SmartDap> GetNotExcludedDaps();
 
 				typedef void (* NewRouteComputedTracedCallback)
@@ -72,8 +74,6 @@ namespace ns3 {
 				virtual void SendTc ();
 				virtual void ProcessHna (const lqolsr::MessageHeader &msg, const Ipv4Address &senderIface);
 				virtual void ExcludeDaps();
-				virtual float GetCostToTcSend(lqolsr::LinkTuple *link_tuple);
-				virtual uint32_t GetHelloInfoToSendHello(Ipv4Address neiAddress);
 				virtual void LinkTupleTimerExpire (Ipv4Address neighborIfaceAddr);
 				void RoutingTableComputation ();
 
@@ -88,7 +88,6 @@ namespace ns3 {
 				std::map<Ipv4Address, SmartDap> m_gateways;
 				double alpha;
 				Ptr<UniformRandomVariable> m_rnd;
-				bool malicious;
 				Ipv4Address controllerAddress;
 
 				TracedCallback<std::vector<SmartDap>, const Ipv4Address & > m_newRouteComputedTrace;

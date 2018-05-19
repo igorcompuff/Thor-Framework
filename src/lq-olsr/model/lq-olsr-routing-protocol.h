@@ -321,6 +321,14 @@ protected:
    */
   virtual void SendTc ();
 
+  virtual void InitializeDestinations();
+
+  virtual void UpdateDestination(DestinationTuple & tuple, const Ipv4Address & destAddress, float newCost, const LinkTuple * accessLink, int hopCount);
+
+  float GetCostToDestination(const Ipv4Address & address);
+
+  std::vector<DestinationTuple> GetDestinations();
+
 
 private:
   std::map<Ipv4Address, RoutingTableEntry> m_table; //!< Data structure for the routing table.
@@ -501,9 +509,6 @@ private:
    */
   void
   MprComputation ();
-
-  void
-  InitializeDestinations();
 
   int
   GetMinDestination();

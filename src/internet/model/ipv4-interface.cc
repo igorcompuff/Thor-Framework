@@ -41,16 +41,10 @@ TypeId
 Ipv4Interface::GetTypeId (void)
 {
   static TypeId tid = TypeId ("ns3::Ipv4Interface")
-    .SetParent<Object> ()
-    .SetGroupName ("Internet")
-    .AddAttribute ("ArpCache",
-                   "The arp cache for this ipv4 interface",
-                   PointerValue (0),
-                   MakePointerAccessor (&Ipv4Interface::SetArpCache, 
-                                        &Ipv4Interface::GetArpCache),
-                   MakePointerChecker<ArpCache> ())
-  ;
-  ;
+	.SetParent<Object> ()
+	.SetGroupName ("Internet")
+	.AddAttribute ("ArpCache", "The arp cache for this ipv4 interface", PointerValue (0), MakePointerAccessor (&Ipv4Interface::SetArpCache, &Ipv4Interface::GetArpCache),MakePointerChecker<ArpCache> ())
+	.AddTraceSource ("InterfaceTx", "Send ipv4 packet to outgoing interface.", MakeTraceSourceAccessor (&Ipv4Interface::m_txTrace), "ns3::Ipv4Interface::TxRxTracedCallback");
   return tid;
 }
 
@@ -287,7 +281,9 @@ Ipv4Interface::Send (Ptr<Packet> p, const Ipv4Header & hdr, Ipv4Address dest)
       if (found)
         {
           NS_LOG_LOGIC ("Address Resolved.  Send.");
+          m_txTrace(p->Copy(), hdr.GetDestination(), dest);
           m_tc->Send (m_device, Create<Ipv4QueueDiscItem> (p, hardwareDestination, Ipv4L3Protocol::PROT_NUMBER, hdr));
+
         }
     }
   else

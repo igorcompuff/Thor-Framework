@@ -632,6 +632,18 @@ RoutingProtocol::GetMainAddress (Ipv4Address iface_addr) const
     }
 }
 
+float
+RoutingProtocol::GetCostToDestination(const Ipv4Address & address)
+{
+	return m_costs[address];
+}
+
+std::vector<DestinationTuple>
+RoutingProtocol::GetDestinations()
+{
+	return m_destinations;
+}
+
 void
 RoutingProtocol::InitializeDestinations()
 {
@@ -663,9 +675,12 @@ RoutingProtocol::InitializeDestinations()
 					dest.destAddress = it2->neighborIfaceAddr;
 					dest.accessLink = &(*it2);
 					dest.hopCount = 1;
+
+					float cost = m_metric->GetCost(it2->neighborIfaceAddr);
+
 					m_destinations.push_back(dest);
-					m_costs[it2->neighborIfaceAddr] = m_metric->GetCost(it2->neighborIfaceAddr);//it2->cost;
-					NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[it2->neighborIfaceAddr]);
+					m_costs[it2->neighborIfaceAddr] = cost;
+					NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << cost);
 					added = true;
 				}
 
@@ -678,11 +693,13 @@ RoutingProtocol::InitializeDestinations()
 			if (added && !mainAddrSelected)
 			{
 			  DestinationTuple lastAdded = m_destinations.back();
-			  m_costs[it->neighborMainAddr] = m_costs[lastAdded.destAddress];
+
+			  float cost = m_costs[lastAdded.destAddress];
+			  m_costs[it->neighborMainAddr] = cost;
 			  lastAdded.destAddress = it->neighborMainAddr;
 			  m_destinations.push_back(lastAdded);
 
-			  NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << m_costs[lastAdded.destAddress]);
+			  NS_LOG_DEBUG("Added destination " << dest.destAddress << "with cost = " << cost);
 			}
 		}
 	}
@@ -733,6 +750,14 @@ RoutingProtocol::GetMinDestination()
 }
 
 void
+RoutingProtocol::UpdateDestination(DestinationTuple & tuple, const Ipv4Address & destAddress, float newCost, const LinkTuple * accessLink, int hopCount)
+{
+	m_costs[destAddress] = newCost;
+	tuple.accessLink = accessLink;
+	tuple.hopCount = hopCount;
+}
+
+void
 RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple & dest)
 {
 	const TopologySet &topology = m_state.GetTopologySet ();
@@ -756,9 +781,12 @@ RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple & dest)
 
 			if (m_metric->CompareBest(newCost, currentCost) > 0)
 			{
-				m_costs[top->destAddr] = newCost;
-				it->accessLink = dest.accessLink;
-				it->hopCount = dest.hopCount + 1;
+				UpdateDestination(*it, top->destAddr, newCost, dest.accessLink, dest.hopCount + 1);
+
+				//m_costs[top->destAddr] = newCost;
+				//m_delivery_probs[top->destAddr] = m_delivery_probs[dest.destAddress] * 1 / top->cost;
+				//it->accessLink = dest.accessLink;
+				//it->hopCount = dest.hopCount + 1;
 			}
 		}
 	}
