@@ -6,3 +6,5 @@ build/
 
 .waf*/
 /Debug/
+*.txt
+*.pcap

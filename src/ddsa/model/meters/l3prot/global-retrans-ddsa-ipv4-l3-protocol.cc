@@ -23,7 +23,10 @@ namespace ns3 {
 			static TypeId tid = TypeId ("ns3::ddsa::GlobalRetransDdsaIpv4L3Protocol")
 			.SetParent<DdsaIpv4L3ProtocolBase> ()
 			.SetGroupName ("Ddsa")
-			.AddConstructor<GlobalRetransDdsaIpv4L3Protocol> ();
+			.AddConstructor<GlobalRetransDdsaIpv4L3Protocol> ()
+			.AddTraceSource ("L3tx", "Packet is sent forward",
+							 MakeTraceSourceAccessor (&GlobalRetransDdsaIpv4L3Protocol::m_txTrace),
+							 "ns3::ddsa::PacketSentTracedCallback");
 
 			return tid;
 		}
@@ -51,7 +54,7 @@ namespace ns3 {
 				{
 					int globalRetrans = rp->GetTotalRetransmissions();
 
-					for (int i = 0; i <= globalRetrans; i++)
+					for (int i = 0; i < globalRetrans; i++)
 					{
 						std::vector<Dap> selectedDaps = rp->SelectDaps();
 
@@ -69,8 +72,8 @@ namespace ns3 {
 						//The meter must have routes to all available DAPS.
 						NS_ASSERT(newroute);
 
+						m_txTrace(packet, selectedDap.GetAddress());
 						DdsaIpv4L3ProtocolBase::DoSend(packet, source, selectedDap.GetAddress(), protocol, newroute);
-
 					}
 
 					processed = true;

@@ -598,21 +598,21 @@ RoutingProtocol::HasLinkTo(const Ipv4Address & neighbor)
 void
 RoutingProtocol::MprComputation ()
 {
-  NS_LOG_FUNCTION(this);
-  NeighborSet neighbors = m_state.GetNeighbors();
-  MprSet newMprSet;
+	NS_LOG_FUNCTION(this);
+	NeighborSet neighbors = m_state.GetNeighbors();
+	MprSet newMprSet;
 
-  for(NeighborSet::iterator neighbor = neighbors.begin(); neighbor != neighbors.end(); neighbor++)
-    {
-      if (neighbor->status != NeighborTuple::STATUS_NOT_SYM)
-      {
-	newMprSet.insert(neighbor->neighborMainAddr);
-      }
-    }
+	for(NeighborSet::iterator neighbor = neighbors.begin(); neighbor != neighbors.end(); neighbor++)
+	{
+		if (neighbor->status != NeighborTuple::STATUS_NOT_SYM)
+		{
+			newMprSet.insert(neighbor->neighborMainAddr);
+		}
+	}
 
-  m_state.SetMprSet(newMprSet);
+	m_state.SetMprSet(newMprSet);
 
-  NS_LOG_DEBUG ("Mpr Computation concluded for: " << m_mainAddress);
+	NS_LOG_DEBUG ("Mpr Computation concluded for: " << m_mainAddress);
 
 }
 

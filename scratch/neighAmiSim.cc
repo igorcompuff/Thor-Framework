@@ -2,7 +2,6 @@
 #include "ns3/core-module.h"
 #include "ns3/etx-ff.h"
 #include "ns3/lq-olsr-header.h"
-#include "ns3/ddsa-routing-protocol-adapter.h"
 #include "ns3/lq-olsr-routing-protocol.h"
 #include "ns3/ddsa-helper.h"
 #include "ns3/lq-olsr-helper.h"
@@ -16,10 +15,6 @@
 #include "ns3/network-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/ddsa-internet-stack-helper.h"
-#include "ns3/ipv4-l3-protocol-ddsa-adapter.h"
-#include "ns3/ddsa-routing-protocol-adapter.h"
-#include "ns3/smart-ddsa-routing-protocol-adapter.h"
-#include "ns3/malicious-lq-routing-protocol.h"
 #include "ns3/integer.h"
 #include "ns3/simple-header.h"
 #include "ns3/malicious-dap-routing-protocol.h"
@@ -66,6 +61,7 @@ struct AmiPacketInformation
     int nSent;
     LatencyInformation latency;
     bool received;
+    Ipv4Address gwAddress;
   public:
 
     AmiPacketInformation()
@@ -129,6 +125,16 @@ struct AmiPacketInformation
     {
       return nSent;
     }
+
+    Ipv4Address GetGatwayAddress()
+    {
+    	return gwAddress;
+    }
+
+    void SetGatewayAddress(Ipv4Address address)
+    {
+    	gwAddress = address;
+    }
 };
 
 
@@ -154,6 +160,15 @@ class NeighborhoodAmiSim
 		void ConfigureSimulation(int argc, char *argv[]);
 		void GenerateSimulationSummary();
 
+		//Tests
+
+		void TestStack();
+		bool TestNonDdsaMeterStack();
+		bool TestOriginalDdsaMeterStack();
+		bool TestDumbDdsaMeterStack();
+		bool TestDynamicDdsaMeterStack();
+		bool TestDapsStack();
+
 		const double BEST_LINK = 112;//50.0;
 		const double GOOD_LINK = 112;//90.0;
 		const double BAD_LINK = 114.02;
@@ -170,6 +185,9 @@ class NeighborhoodAmiSim
 		Ptr<Node> GetNodeById(uint32_t id, NodeContainer nodes);
 		void SheduleFailure(double time);
 		Ptr<Node> GetRandomFailingNode();
+		void ConnectDdsaMetersSentPacketTrace();
+		void ConnectEtxMetersSentPacketTrace();
+		Ptr<Ipv4RoutingProtocol> GetNodeEffectiveRoutingProtocol(Ptr<Node> node);
 
 		//Simulation Configuration
 
@@ -204,7 +222,8 @@ class NeighborhoodAmiSim
 
 		//Callback methods
 
-		void ApplicationPacketSent(Ptr<const Packet>);
+		void DdsaApplicationPacketSent(Ptr<const Packet>, const Ipv4Address & dapAddress);
+		void EtxAplicationPacketSent(const Ipv4Header & header, Ptr<const Packet> packet, uint32_t intId);
 		void ControllerReceivePacket (Ptr<Socket> socket);
 		void DapReceivedPacket (Ptr<Socket> socket);
 		void ExecuteFailure();
@@ -310,6 +329,55 @@ NeighborhoodAmiSim::ParseSenders()
 			senderIndexList.push_back(std::stoi(indexStr));
 		}
 	}
+}
+
+void
+NeighborhoodAmiSim::ConnectDdsaMetersSentPacketTrace()
+{
+	for(NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
+	{
+		Ptr<Node> meter = *it;
+		Ptr<GlobalRetransDdsaIpv4L3Protocol> leprot = meter->GetObject<GlobalRetransDdsaIpv4L3Protocol>();
+		NS_ASSERT(leprot);
+		leprot->TraceConnectWithoutContext("L3tx", MakeCallback(&NeighborhoodAmiSim::DdsaApplicationPacketSent, this));
+	}
+}
+
+void
+NeighborhoodAmiSim::ConnectEtxMetersSentPacketTrace()
+{
+	for(NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
+	{
+		Ptr<Node> meter = *it;
+		Ptr<Ipv4L3Protocol> leprot = meter->GetObject<Ipv4L3Protocol>();
+		NS_ASSERT(leprot);
+		leprot->TraceConnectWithoutContext("SendOutgoing", MakeCallback(&NeighborhoodAmiSim::EtxAplicationPacketSent, this));
+	}
+}
+
+Ptr<Ipv4RoutingProtocol>
+NeighborhoodAmiSim::GetNodeEffectiveRoutingProtocol(Ptr<Node> node)
+{
+	Ptr<Ipv4> stack = node->GetObject<Ipv4> ();
+
+	Ptr<Ipv4ListRouting> lrp = DynamicCast<Ipv4ListRouting> (stack->GetRoutingProtocol ());
+	Ptr<Ipv4RoutingProtocol> rp;
+
+	for (uint32_t i = 0; i < lrp->GetNRoutingProtocols(); i++)
+	{
+		int16_t priority;
+
+		rp = lrp->GetRoutingProtocol(i, priority);
+
+		if (priority > 0)
+		{
+			return rp;
+		}
+	}
+
+	NS_ASSERT_MSG(true, "The specified node has no routing protocol other than StaticRoutingProtocol");
+
+	return NULL;
 }
 
 void
@@ -663,6 +731,8 @@ NeighborhoodAmiSim::InstallOriginalMeterStack()
 	helper.Set("Alpha", DoubleValue(0.0));
 
 	InstallInternetStack(helper, meters, "ns3::ddsa::GlobalRetransDdsaIpv4L3Protocol");
+
+	ConnectDdsaMetersSentPacketTrace();
 }
 
 void
@@ -673,6 +743,8 @@ NeighborhoodAmiSim::InstallDumbMeterStack()
 	helper.Set("Alpha", DoubleValue(0.0));
 
 	InstallInternetStack(helper, meters, "ns3::ddsa::GlobalRetransDdsaIpv4L3Protocol");
+
+	ConnectDdsaMetersSentPacketTrace();
 }
 
 void
@@ -681,14 +753,21 @@ NeighborhoodAmiSim::InstallNonDdsaMeterStack()
 	DDsaHelper helper(Etx::GetTypeId(), lqolsr::RoutingProtocol::GetTypeId());
 
 	InstallInternetStack(helper, meters, "ns3::Ipv4L3Protocol");
+
+	ConnectEtxMetersSentPacketTrace();
 }
 
 void
 NeighborhoodAmiSim::InstallDynamicRetransDdsa()
 {
 	DDsaHelper helper(Etx::GetTypeId(), DynamicRetransDdsaRoutingProtocol::GetTypeId());
+	helper.Set("Prob", DoubleValue(0.99)); //The intended delyvery probability must be 99%
+	helper.Set("Threshold", DoubleValue(0.1)); //Daps with delivery probability below 10% will be excluded
+	helper.Set("LinkTrans", IntegerValue(4)); //Link layer transmissions: 1 + 3 retransmissions
 
 	InstallInternetStack(helper, meters, "ns3::ddsa::GlobalRetransDdsaIpv4L3Protocol");
+
+	ConnectDdsaMetersSentPacketTrace();
 }
 
 void
@@ -761,9 +840,10 @@ NeighborhoodAmiSim::ConfigureDapsHna()
 void
 NeighborhoodAmiSim::UpdateRoutingProtocolWithControllerAddress(Ptr<Node> node, Ipv4Address controllerAddress)
 {
-	Ptr<ns3::ddsa::DdsaIpv4L3ProtocolBase> ddsaRp = node->GetObject<ns3::ddsa::DdsaIpv4L3ProtocolBase>();
-	NS_ASSERT (ddsaRp);
-	ddsaRp->SetControllerAddress(controllerAddress);
+	Ptr<DdsaIpv4L3ProtocolBase> ddsarp = node->GetObject<DdsaIpv4L3ProtocolBase>();
+
+	NS_ASSERT (ddsarp);
+	ddsarp->SetControllerAddress(controllerAddress);
 }
 
 void
@@ -799,7 +879,10 @@ NeighborhoodAmiSim::ConfigureIpAddressing()
 	ipv4.SetBase (Ipv4Address("172.16.1.0"), "255.255.255.0");
 	csmaIpv4Devices = ipv4.Assign (csmaDevices);
 
-	UpdateRoutingProtocolWithControllerAddress();
+	if (ddsaMode != ProtocolMode::ETX)
+	{
+		UpdateRoutingProtocolWithControllerAddress();
+	}
 }
 
 Ptr<Node>
@@ -822,7 +905,7 @@ NeighborhoodAmiSim::ConfigureMeterApplication(uint16_t port, Time start, Time st
 {
 	NodeContainer nodes;
 	AmiAppHelper amiHelper ("ns3::UdpSocketFactory", Address (InetSocketAddress (csmaIpv4Devices.GetAddress(0), port)));
-	amiHelper.SetAttribute("Retrans", IntegerValue(ddsa_retrans));
+	//amiHelper.SetAttribute("Retrans", IntegerValue(ddsa_retrans));
 
 	ApplicationContainer apps;
 
@@ -831,7 +914,7 @@ NeighborhoodAmiSim::ConfigureMeterApplication(uint16_t port, Time start, Time st
 		Ptr<Node> sender = GetNodeById(i, meters);//meters.Get(i);
 
 		apps.Add(amiHelper.Install(sender));
-		apps.Get(apps.GetN() - 1)->TraceConnectWithoutContext("Tx", MakeCallback(&NeighborhoodAmiSim::ApplicationPacketSent, this));
+		//apps.Get(apps.GetN() - 1)->TraceConnectWithoutContext("Tx", MakeCallback(&NeighborhoodAmiSim::ApplicationPacketSent, this));
 	}
 
 	if (apps.GetN() > 0)
@@ -889,8 +972,8 @@ NeighborhoodAmiSim::DapReceivedPacket (Ptr<Socket> socket)
 
 		packet->PeekHeader(amiHeader);
 
-		uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-		NS_LOG_UNCOND ("Dap " << socket->GetNode()->GetId() << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
+		//uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+		//NS_LOG_UNCOND ("Dap " << socket->GetNode()->GetId() << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
 
 		Ptr<Packet> pkt = Create<Packet>();
 		pkt->AddHeader(amiHeader);
@@ -900,18 +983,32 @@ NeighborhoodAmiSim::DapReceivedPacket (Ptr<Socket> socket)
 }
 
 void
-NeighborhoodAmiSim::ApplicationPacketSent(Ptr<const Packet> packetSent)
+NeighborhoodAmiSim::DdsaApplicationPacketSent(Ptr<const Packet> packetSent, const Ipv4Address & dapAddress)
 {
-  AmiHeader amiHeader;
-  packetSent->PeekHeader(amiHeader);
+	Ptr<Packet> pCopy = packetSent->Copy();
 
-  uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-  uint16_t meterId = amiHeader.GetNodeId();
+	UdpHeader l4Header;
+	AmiHeader amiHeader;
+	pCopy->RemoveHeader(l4Header);
+	pCopy->RemoveHeader(amiHeader);
 
-  NS_LOG_UNCOND ("Application packet" << seqNumber << " sent at" << " at " << Simulator::Now().GetSeconds() << " seconds.");
+	if (amiHeader.GetReadingInfo() == 1)
+	{
+		uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
+		uint16_t meterId = amiHeader.GetNodeId();
 
-  packetsSent[meterId][seqNumber].SetSeqNumber(seqNumber);
-  packetsSent[meterId][seqNumber].Send();
+		packetsSent[meterId][seqNumber].SetSeqNumber(seqNumber);
+		packetsSent[meterId][seqNumber].SetGatewayAddress(dapAddress);
+		packetsSent[meterId][seqNumber].Send();
+
+		//NS_LOG_UNCOND ("Application packet" << seqNumber << " sent by meter " << meterId << " at" << " at " << Simulator::Now().GetSeconds() << " seconds to DAP " << dapAddress);
+	}
+}
+
+void
+NeighborhoodAmiSim::EtxAplicationPacketSent(const Ipv4Header & header, Ptr<const Packet> packet, uint32_t intId)
+{
+	DdsaApplicationPacketSent(packet, Ipv4Address::GetAny());
 }
 
 void
@@ -929,10 +1026,9 @@ NeighborhoodAmiSim::ControllerReceivePacket (Ptr<Socket> socket)
 			uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
 			uint16_t meterId = amiHeader.GetNodeId();
 
-			NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " sent by " << meterId << " at " << Simulator::Now().GetSeconds());
-
 			if (!packetsSent[meterId][seqNumber].Received())
 			{
+				NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " sent by " << meterId << " at " << Simulator::Now().GetSeconds());
 				packetsSent[meterId][seqNumber].Receive();
 			}
 			else
@@ -946,7 +1042,6 @@ NeighborhoodAmiSim::ControllerReceivePacket (Ptr<Socket> socket)
 		}
 	}
 }
-
 
 //Failure generation
 
@@ -982,7 +1077,7 @@ NeighborhoodAmiSim::ExecuteFailure()
 	}
 
 
-	if (failureMode == Ipv4L3ProtocolDdsaAdapter::FailureType::MALICIOUS)
+	if (failureMode == FailingIpv4L3Protocol::FailureType::MALICIOUS)
 	{
 		Ptr<MaliciousDapRoutingProtocol> rp = failingDap->GetObject<MaliciousDapRoutingProtocol>();
 
@@ -1041,11 +1136,141 @@ NeighborhoodAmiSim::GenerateSimulationSummary()
 	statFile.close();
 }
 
+//Tests
+
+bool
+NeighborhoodAmiSim::TestNonDdsaMeterStack()
+{
+	bool metersComply = true;
+
+	for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
+	{
+		Ptr<Node> meter = *it;
+
+		Ptr<Ipv4L3Protocol> nonDdsaL3Prot = meter->GetObject<Ipv4L3Protocol>();
+		Ptr<DdsaIpv4L3ProtocolBase> ddsaL3Prot = meter->GetObject<DdsaIpv4L3ProtocolBase>();
+
+		Ptr<Ipv4RoutingProtocol> rp = GetNodeEffectiveRoutingProtocol(meter);
+
+		metersComply = nonDdsaL3Prot && !ddsaL3Prot && DynamicCast<lqolsr::RoutingProtocol> (rp) && !DynamicCast<DdsaRoutingProtocolBase> (rp);
+	}
+
+	return metersComply;
+}
+
+bool
+NeighborhoodAmiSim::TestOriginalDdsaMeterStack()
+{
+	bool metersComply = true;
+
+	for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
+	{
+		Ptr<Node> meter = *it;
+
+		Ptr<GlobalRetransDdsaIpv4L3Protocol> ddsaL3Prot = meter->GetObject<GlobalRetransDdsaIpv4L3Protocol>();
+
+		Ptr<Ipv4RoutingProtocol> rp = GetNodeEffectiveRoutingProtocol(meter);
+
+		metersComply = ddsaL3Prot && DynamicCast<OriginalDdsaRoutingProtocol> (rp);
+	}
+
+	return metersComply;
+}
+
+bool
+NeighborhoodAmiSim::TestDumbDdsaMeterStack()
+{
+	bool metersComply = true;
+
+	for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
+	{
+		Ptr<Node> meter = *it;
+
+		Ptr<GlobalRetransDdsaIpv4L3Protocol> ddsaL3Prot = meter->GetObject<GlobalRetransDdsaIpv4L3Protocol>();
+
+		Ptr<Ipv4RoutingProtocol> rp = GetNodeEffectiveRoutingProtocol(meter);
+
+		metersComply = ddsaL3Prot && DynamicCast<DumbDdsaRoutingProtocol> (rp);
+	}
+
+	return metersComply;
+}
+
+bool
+NeighborhoodAmiSim::TestDynamicDdsaMeterStack()
+{
+	bool metersComply = true;
+
+	for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
+	{
+		Ptr<Node> meter = *it;
+
+		Ptr<GlobalRetransDdsaIpv4L3Protocol> ddsaL3Prot = meter->GetObject<GlobalRetransDdsaIpv4L3Protocol>();
+
+		Ptr<Ipv4RoutingProtocol> rp = GetNodeEffectiveRoutingProtocol(meter);
+
+		metersComply = ddsaL3Prot && DynamicCast<DynamicRetransDdsaRoutingProtocol> (rp);
+	}
+
+	return metersComply;
+}
+
+bool
+NeighborhoodAmiSim::TestDapsStack()
+{
+	bool dapsComply = true;
+
+	for (NodeContainer::Iterator it = daps.Begin(); it != daps.End(); it++)
+	{
+		Ptr<Node> dap = *it;
+
+		Ptr<FailingIpv4L3Protocol> ddsaL3Prot = dap->GetObject<FailingIpv4L3Protocol>();
+
+		Ptr<Ipv4RoutingProtocol> rp = GetNodeEffectiveRoutingProtocol(dap);
+
+		dapsComply = ddsaL3Prot && DynamicCast<MaliciousDapRoutingProtocol> (rp);
+	}
+
+	return dapsComply;
+}
+
+void
+NeighborhoodAmiSim::TestStack()
+{
+	switch(ddsaMode)
+	{
+		case ProtocolMode::ETX:
+		{
+			NS_ASSERT_MSG(TestNonDdsaMeterStack(), "There is a problem with ETX meter stack");
+			break;
+		}
+		case ProtocolMode::ORIGINAL_DDSA:
+		{
+			NS_ASSERT_MSG(TestOriginalDdsaMeterStack(), "There is a problem with Original DDSA meter stack");
+			break;
+		}
+		case ProtocolMode::DUMB_DDSA:
+		{
+			NS_ASSERT_MSG(TestDumbDdsaMeterStack(), "There is a problem with Dumb DDSA meter stack");
+			break;
+		}
+		case ProtocolMode::DYNAMIC_RETRANS_DDSA:
+		{
+			NS_ASSERT_MSG(TestDynamicDdsaMeterStack(), "There is a problem with Dynamic DDSA meter stack");
+			break;
+		}
+	}
+
+	NS_ASSERT_MSG(TestDapsStack(), "There is a problem daps stack");
+
+}
+
 int main (int argc, char *argv[])
 {
 	NeighborhoodAmiSim simulation;
 
 	simulation.ConfigureSimulation(argc, argv);
+	simulation.TestStack();
 
 	Simulator::Stop (Seconds (250.0));
 	Simulator::Run ();

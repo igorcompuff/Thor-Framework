@@ -70,17 +70,14 @@ class AmiApplication : public Application
     Address m_peer;         //!< Peer address
     TypeId m_socketTid;
     EventId m_packetSentEvent;
-    EventId m_copySentEvent;
     Ptr<UniformRandomVariable> m_rnd;
     TracedCallback<Ptr<const Packet> > m_txTrace;
-    int m_nRetransmissions;
 
     virtual void SendPacket ();
 
     // inherited from Application base class.
     virtual void StartApplication (void);    // Called at time specified by Start
     virtual void StopApplication (void);     // Called at time specified by Stop
-    void SendCopy (Ptr<Packet> packet, ami::AmiHeader header, int count);
 };
 
 } // namespace ns3

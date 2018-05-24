@@ -25,15 +25,15 @@ namespace ns3 {
 				.SetParent<OriginalDdsaRoutingProtocol> ()
 				.SetGroupName ("Ddsa")
 				.AddConstructor<DynamicRetransDdsaRoutingProtocol>()
-				.AddAttribute ("Prop", "Target Delivery Probability",
+				.AddAttribute ("Prob", "Target Delivery Probability",
 								DoubleValue (0.99),
 								MakeDoubleAccessor (&DynamicRetransDdsaRoutingProtocol::m_targetProbability),
 								MakeDoubleChecker<double> (0, 1))
-				.AddAttribute ("tprob", "All DAPs must have at least tprob delivery probability in order to be considered available to selection.",
+				.AddAttribute ("Threshold", "All DAPs must have at least Threshold delivery probability in order to be considered available to selection.",
 								DoubleValue (0.1),
 								MakeDoubleAccessor (&DynamicRetransDdsaRoutingProtocol::m_thresholdProbability),
 								MakeDoubleChecker<double> (0, 1))
-				.AddAttribute ("ltrans", "Total Link Layer Transmissions",
+				.AddAttribute ("LinkTrans", "Total Link Layer Transmissions",
 								IntegerValue (4),
 								MakeIntegerAccessor (&DynamicRetransDdsaRoutingProtocol::linkLayerTrans),
 								MakeIntegerChecker<int> (1));

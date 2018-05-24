@@ -173,7 +173,7 @@ namespace ns3 {
 		int
 		OriginalDdsaRoutingProtocol::GetTotalRetransmissions()
 		{
-			return m_retrans;
+			return (m_retrans + 1);
 		}
 
 		void

@@ -36,10 +36,6 @@ AmiApplication::GetTypeId (void)
                    TypeIdValue (UdpSocketFactory::GetTypeId ()),
                    MakeTypeIdAccessor (&AmiApplication::m_socketTid),
                    MakeTypeIdChecker ())
-     .AddAttribute ("Retrans", "Number of Retransmissions",
-			    IntegerValue (0),
-			    MakeIntegerAccessor(&AmiApplication::m_nRetransmissions),
-			    MakeIntegerChecker<int> (0))
     .AddTraceSource ("Tx", "A new packet is created and is sent",
                      MakeTraceSourceAccessor (&AmiApplication::m_txTrace),
                      "ns3::Packet::TracedCallback")
@@ -54,7 +50,6 @@ AmiApplication::AmiApplication()
   m_rnd = CreateObject<UniformRandomVariable>();
   m_rnd->SetAttribute("Min", DoubleValue(0));
   m_rnd->SetAttribute("Max", DoubleValue(10000));
-  m_nRetransmissions = 0;
 }
 
 AmiApplication::~AmiApplication(){}
@@ -89,7 +84,6 @@ void AmiApplication::StopApplication () // Called at time specified by Stop
   NS_LOG_FUNCTION (this);
 
   Simulator::Cancel(m_packetSentEvent);
-  Simulator::Cancel(m_copySentEvent);
 
   if(m_socket != 0)
     {
@@ -99,24 +93,6 @@ void AmiApplication::StopApplication () // Called at time specified by Stop
     {
       NS_LOG_WARN ("AmiApplication found null socket to close in StopApplication");
     }
-}
-
-void
-AmiApplication::SendCopy (Ptr<Packet> packet, ami::AmiHeader header, int count)
-{
-	NS_ASSERT (m_copySentEvent.IsExpired ());
-	m_socket->Send (packet);
-	m_txTrace (packet);
-	NS_LOG_DEBUG("(" << Simulator::Now().GetSeconds() << ") Sent packet copy " << header.GetPacketSequenceNumber());
-
-	if (--count > 0)
-	{
-		m_copySentEvent = Simulator::Schedule (MilliSeconds(11), &AmiApplication::SendCopy, this, packet, header, count);
-	}
-	else
-	{
-		m_packetSentEvent = Simulator::Schedule (Seconds(3), &AmiApplication::SendPacket, this);
-	}
 }
 
 void
@@ -134,7 +110,11 @@ AmiApplication::SendPacket ()
 
   packet->AddHeader(header);
 
-  SendCopy(packet, header, m_nRetransmissions + 1);
+  m_socket->Send (packet);
+  m_txTrace (packet);
+
+  NS_LOG_DEBUG("(" << Simulator::Now().GetSeconds() << ") Sent packet " << header.GetPacketSequenceNumber());
+  m_packetSentEvent = Simulator::Schedule (Seconds(3), &AmiApplication::SendPacket, this);
 }
 
 int64_t
