@@ -1,0 +1,16 @@
+.lock-*
+.waf*
+build
+ChangeLog
+MANIFEST
+pybindgen*.tar.bz2
+pybindgen/version.py
+doc/_build
+doc/figures/work-flow-basic.png
+doc/figures/work-flow-gccxml-apidefs.png
+doc/figures/work-flow-gccxml.png
+*.pyc
+*.pyo
+*~
+*.bak
+.lock-waf_linux2_build
