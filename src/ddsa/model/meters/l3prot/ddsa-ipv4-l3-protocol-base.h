@@ -25,8 +25,12 @@ namespace ns3 {
 				void SetControllerAddress(Ipv4Address address);
 				Ipv4Address GetControllerAddress();
 
+				typedef void (* PacketSentTracedCallback)
+							 (Ptr<const Packet> packet, const Ipv4Address &address);
+
 			protected:
 				virtual void DoSend(Ptr<Packet> packet, Ipv4Address source, Ipv4Address destination, uint8_t protocol, Ptr<Ipv4Route> route);
+				TracedCallback<Ptr<const Packet>, const Ipv4Address &> m_txTrace;
 
 			private:
 				Ipv4Address m_controllerAddress;

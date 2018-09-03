@@ -47,6 +47,7 @@ namespace ns3 {
 				double probability = 1 / (double)m_gateways.size();;
 
 				it->SetProbability(probability);
+				//NS_LOG_DEBUG("Dap " << it->GetAddress() << ": " << it->GetProbability() << "\n");
 			}
 		}
 	}

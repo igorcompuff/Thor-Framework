@@ -23,7 +23,7 @@
 #include "ns3/log.h"
 #include "simple-header.h"
 
-#define READING_HEADER_SIZE 8
+#define READING_HEADER_SIZE 16
 
 namespace ns3 {
 
@@ -37,6 +37,8 @@ namespace ami {
   {
     m_packetSequenceNumber = 0;
     m_readingInfo = 0;
+    m_meterId = 0;
+    m_dapId = 0;
   }
 
   AmiHeader::~AmiHeader ()
@@ -76,8 +78,9 @@ namespace ami {
   AmiHeader::Serialize (Buffer::Iterator start) const
   {
     Buffer::Iterator i = start;
-    i.WriteHtonU16 (m_packetSequenceNumber);
-    i.WriteHtonU16 (m_nodeId);
+    i.WriteHtonU32 (m_packetSequenceNumber);
+    i.WriteHtonU32 (m_meterId);
+    i.WriteHtonU32 (m_dapId);
     i.WriteHtonU32 (m_readingInfo);
   }
 
@@ -85,8 +88,9 @@ namespace ami {
   AmiHeader::Deserialize (Buffer::Iterator start)
   {
     Buffer::Iterator i = start;
-      m_packetSequenceNumber  = i.ReadNtohU16 ();
-      m_nodeId = i.ReadNtohU16 ();
+      m_packetSequenceNumber  = i.ReadNtohU32 ();
+      m_meterId = i.ReadNtohU32 ();
+      m_dapId = i.ReadNtohU32 ();
       m_readingInfo = i.ReadNtohU32 ();
       return GetSerializedSize ();
   }

@@ -323,7 +323,7 @@ protected:
 
   virtual void InitializeDestinations();
 
-  virtual void UpdateDestination(DestinationTuple & tuple, const Ipv4Address & destAddress, float newCost, const LinkTuple * accessLink, int hopCount);
+  virtual float UpdateDestination(DestinationTuple & tupleToUpdate, const DestinationTuple & destinationFound, const TopologyTuple & topTuple);
 
   float GetCostToDestination(const Ipv4Address & address);
 

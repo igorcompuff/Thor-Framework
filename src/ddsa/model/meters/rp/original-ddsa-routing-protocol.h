@@ -24,7 +24,7 @@ namespace ns3 {
 				virtual ~OriginalDdsaRoutingProtocol ();
 				void SetAlpha(double alpha);
 				double GetAlpha();
-				virtual int GetTotalRetransmissions();
+				virtual int GetTotalTransmissions();
 				virtual std::vector<Dap> SelectDaps();
 
 			protected:

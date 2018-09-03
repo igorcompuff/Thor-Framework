@@ -42,23 +42,10 @@ namespace ns3 {
 			for (std::vector<Dap>::iterator it = m_gateways.begin(); it != m_gateways.end(); it++)
 			{
 
-				if (MustExclude(*it))
+				if (!it->IsExcluded() && MustExclude(*it))
 				{
-					if (!it->IsExcluded())
-					{
-						NS_LOG_DEBUG("Dap " << it->GetAddress() << " excluded.");
-
-						it->Exclude(true);
-						excluded = true;
-					}
-				}
-				else
-				{
-					if (it->IsExcluded())
-					{
-						NS_LOG_DEBUG("Dap " << it->GetAddress() << " is no longer excluded.");
-						excluded = false;
-					}
+					it->Exclude(true);
+					excluded = true;
 				}
 			}
 

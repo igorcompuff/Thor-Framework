@@ -547,99 +547,100 @@ void
 Ipv4L3Protocol::Receive ( Ptr<NetDevice> device, Ptr<const Packet> p, uint16_t protocol, const Address &from,
                           const Address &to, NetDevice::PacketType packetType)
 {
-  NS_LOG_FUNCTION (this << device << p << protocol << from << to << packetType);
+	NS_LOG_FUNCTION (this << device << p << protocol << from << to << packetType);
 
-  NS_LOG_LOGIC ("Packet from " << from << " received on node " << 
-                m_node->GetId ());
+	NS_LOG_LOGIC ("Packet from " << from << " received on node " <<
+				m_node->GetId ());
 
 
-  int32_t interface = GetInterfaceForDevice(device);
-  NS_ASSERT_MSG (interface != -1, "Received a packet from an interface that is not known to IPv4");
+	int32_t interface = GetInterfaceForDevice(device);
+	NS_ASSERT_MSG (interface != -1, "Received a packet from an interface that is not known to IPv4");
 
-  Ptr<Packet> packet = p->Copy ();
+	Ptr<Packet> packet = p->Copy ();
 
-  Ptr<Ipv4Interface> ipv4Interface = m_interfaces[interface];
+	Ptr<Ipv4Interface> ipv4Interface = m_interfaces[interface];
 
-  if (ipv4Interface->IsUp ())
-    {
-      m_rxTrace (packet, m_node->GetObject<Ipv4> (), interface);
-    }
-  else
-    {
-      NS_LOG_LOGIC ("Dropping received packet -- interface is down");
-      Ipv4Header ipHeader;
-      packet->RemoveHeader (ipHeader);
-      m_dropTrace (ipHeader, packet, DROP_INTERFACE_DOWN, m_node->GetObject<Ipv4> (), interface);
-      return;
-    }
+	if (ipv4Interface->IsUp ())
+	{
+		m_rxTrace (packet, m_node->GetObject<Ipv4> (), interface);
+	}
+	else
+	{
+		NS_LOG_LOGIC ("Dropping received packet -- interface is down");
+		Ipv4Header ipHeader;
+		packet->RemoveHeader (ipHeader);
+		m_dropTrace (ipHeader, packet, DROP_INTERFACE_DOWN, m_node->GetObject<Ipv4> (), interface);
+		return;
+	}
 
-  Ipv4Header ipHeader;
-  if (Node::ChecksumEnabled ())
-    {
-      ipHeader.EnableChecksum ();
-    }
-  packet->RemoveHeader (ipHeader);
+	Ipv4Header ipHeader;
+	if (Node::ChecksumEnabled ())
+	{
+		ipHeader.EnableChecksum ();
+	}
 
-  // Trim any residual frame padding from underlying devices
-  if (ipHeader.GetPayloadSize () < packet->GetSize ())
-    {
-      packet->RemoveAtEnd (packet->GetSize () - ipHeader.GetPayloadSize ());
-    }
+	packet->RemoveHeader (ipHeader);
 
-  if (!ipHeader.IsChecksumOk ()) 
-    {
-      NS_LOG_LOGIC ("Dropping received packet -- checksum not ok");
-      m_dropTrace (ipHeader, packet, DROP_BAD_CHECKSUM, m_node->GetObject<Ipv4> (), interface);
-      return;
-    }
+	// Trim any residual frame padding from underlying devices
+	if (ipHeader.GetPayloadSize () < packet->GetSize ())
+	{
+		packet->RemoveAtEnd (packet->GetSize () - ipHeader.GetPayloadSize ());
+	}
 
-  // the packet is valid, we update the ARP cache entry (if present)
-  Ptr<ArpCache> arpCache = ipv4Interface->GetArpCache ();
-  if (arpCache)
-    {
-      // case one, it's a a direct routing.
-      ArpCache::Entry *entry = arpCache->Lookup (ipHeader.GetSource ());
-      if (entry)
-        {
-          if (entry->IsAlive ())
-            {
-              entry->UpdateSeen ();
-            }
-        }
-      else
-        {
-          // It's not in the direct routing, so it's the router, and it could have multiple IP addresses.
-          // In doubt, update all of them.
-          // Note: it's a confirmed behavior for Linux routers.
-          std::list<ArpCache::Entry *> entryList = arpCache->LookupInverse (from);
-          std::list<ArpCache::Entry *>::iterator iter;
-          for (iter = entryList.begin (); iter != entryList.end (); iter ++)
-            {
-              if ((*iter)->IsAlive ())
-                {
-                  (*iter)->UpdateSeen ();
-                }
-            }
-        }
-    }
+	if (!ipHeader.IsChecksumOk ())
+	{
+		NS_LOG_LOGIC ("Dropping received packet -- checksum not ok");
+		m_dropTrace (ipHeader, packet, DROP_BAD_CHECKSUM, m_node->GetObject<Ipv4> (), interface);
+		return;
+	}
 
-  for (SocketList::iterator i = m_sockets.begin (); i != m_sockets.end (); ++i)
-    {
-      NS_LOG_LOGIC ("Forwarding to raw socket"); 
-      Ptr<Ipv4RawSocketImpl> socket = *i;
-      socket->ForwardUp (packet, ipHeader, ipv4Interface);
-    }
+	// the packet is valid, we update the ARP cache entry (if present)
+	Ptr<ArpCache> arpCache = ipv4Interface->GetArpCache ();
+	if (arpCache)
+	{
+		// case one, it's a a direct routing.
+		ArpCache::Entry *entry = arpCache->Lookup (ipHeader.GetSource ());
+		if (entry)
+		{
+			if (entry->IsAlive ())
+			{
+				entry->UpdateSeen ();
+			}
+		}
+		else
+		{
+			// It's not in the direct routing, so it's the router, and it could have multiple IP addresses.
+			// In doubt, update all of them.
+			// Note: it's a confirmed behavior for Linux routers.
+			std::list<ArpCache::Entry *> entryList = arpCache->LookupInverse (from);
+			std::list<ArpCache::Entry *>::iterator iter;
+			for (iter = entryList.begin (); iter != entryList.end (); iter ++)
+			{
+				if ((*iter)->IsAlive ())
+				{
+					(*iter)->UpdateSeen ();
+				}
+			}
+		}
+	}
 
-  NS_ASSERT_MSG (m_routingProtocol != 0, "Need a routing protocol object to process packets");
-  if (!m_routingProtocol->RouteInput (packet, ipHeader, device,
-                                      MakeCallback (&Ipv4L3Protocol::IpForward, this),
-                                      MakeCallback (&Ipv4L3Protocol::IpMulticastForward, this),
-                                      MakeCallback (&Ipv4L3Protocol::LocalDeliver, this),
-                                      MakeCallback (&Ipv4L3Protocol::RouteInputError, this)
-                                      ))
-    {
-      NS_LOG_WARN ("No route found for forwarding packet.  Drop.");
-      m_dropTrace (ipHeader, packet, DROP_NO_ROUTE, m_node->GetObject<Ipv4> (), interface);
+	for (SocketList::iterator i = m_sockets.begin (); i != m_sockets.end (); ++i)
+	{
+		NS_LOG_LOGIC ("Forwarding to raw socket");
+		Ptr<Ipv4RawSocketImpl> socket = *i;
+		socket->ForwardUp (packet, ipHeader, ipv4Interface);
+	}
+
+	NS_ASSERT_MSG (m_routingProtocol != 0, "Need a routing protocol object to process packets");
+	if (!m_routingProtocol->RouteInput (packet, ipHeader, device,
+									  MakeCallback (&Ipv4L3Protocol::IpForward, this),
+									  MakeCallback (&Ipv4L3Protocol::IpMulticastForward, this),
+									  MakeCallback (&Ipv4L3Protocol::LocalDeliver, this),
+									  MakeCallback (&Ipv4L3Protocol::RouteInputError, this)
+									  ))
+	{
+		NS_LOG_WARN ("No route found for forwarding packet.  Drop.");
+		m_dropTrace (ipHeader, packet, DROP_NO_ROUTE, m_node->GetObject<Ipv4> (), interface);
     }
 }
 
@@ -1066,64 +1067,68 @@ Ipv4L3Protocol::GetMyNode ()
 void
 Ipv4L3Protocol::LocalDeliver (Ptr<const Packet> packet, Ipv4Header const&ip, uint32_t iif)
 {
-  NS_LOG_FUNCTION (this << packet << &ip << iif);
-  Ptr<Packet> p = packet->Copy (); // need to pass a non-const packet up
-  Ipv4Header ipHeader = ip;
+	NS_LOG_FUNCTION (this << packet << &ip << iif);
+	Ptr<Packet> p = packet->Copy (); // need to pass a non-const packet up
+	Ipv4Header ipHeader = ip;
 
-  if ( !ipHeader.IsLastFragment () || ipHeader.GetFragmentOffset () != 0 )
-    {
-      NS_LOG_LOGIC ("Received a fragment, processing " << *p );
-      bool isPacketComplete;
-      isPacketComplete = ProcessFragment (p, ipHeader, iif);
-      if ( isPacketComplete == false)
-        {
-          return;
-        }
-      NS_LOG_LOGIC ("Got last fragment, Packet is complete " << *p );
-      ipHeader.SetFragmentOffset (0);
-      ipHeader.SetPayloadSize (p->GetSize ());
-    }
+	if ( !ipHeader.IsLastFragment () || ipHeader.GetFragmentOffset () != 0 )
+	{
+		NS_LOG_LOGIC ("Received a fragment, processing " << *p );
+		bool isPacketComplete;
+		isPacketComplete = ProcessFragment (p, ipHeader, iif);
 
-  m_localDeliverTrace (ipHeader, p, iif);
+		if ( isPacketComplete == false)
+		{
+			return;
+		}
 
-  Ptr<IpL4Protocol> protocol = GetProtocol (ipHeader.GetProtocol (), iif);
-  if (protocol != 0)
-    {
-      // we need to make a copy in the unlikely event we hit the
-      // RX_ENDPOINT_UNREACH codepath
-      Ptr<Packet> copy = p->Copy ();
-      enum IpL4Protocol::RxStatus status = 
-        protocol->Receive (p, ipHeader, GetInterface (iif));
-      switch (status) {
-        case IpL4Protocol::RX_OK:
-        // fall through
-        case IpL4Protocol::RX_ENDPOINT_CLOSED:
-        // fall through
-        case IpL4Protocol::RX_CSUM_FAILED:
-          break;
-        case IpL4Protocol::RX_ENDPOINT_UNREACH:
-          if (ipHeader.GetDestination ().IsBroadcast () == true ||
-              ipHeader.GetDestination ().IsMulticast () == true)
-            {
-              break; // Do not reply to broadcast or multicast
-            }
-          // Another case to suppress ICMP is a subnet-directed broadcast
-          bool subnetDirected = false;
-          for (uint32_t i = 0; i < GetNAddresses (iif); i++)
-            {
-              Ipv4InterfaceAddress addr = GetAddress (iif, i);
-              if (addr.GetLocal ().CombineMask (addr.GetMask ()) == ipHeader.GetDestination ().CombineMask (addr.GetMask ()) &&
-                  ipHeader.GetDestination ().IsSubnetDirectedBroadcast (addr.GetMask ()))
-                {
-                  subnetDirected = true;
-                }
-            }
-          if (subnetDirected == false)
-            {
-              GetIcmp ()->SendDestUnreachPort (ipHeader, copy);
-            }
-        }
-    }
+		NS_LOG_LOGIC ("Got last fragment, Packet is complete " << *p );
+		ipHeader.SetFragmentOffset (0);
+		ipHeader.SetPayloadSize (p->GetSize ());
+	}
+
+	m_localDeliverTrace (ipHeader, p, iif);
+
+	Ptr<IpL4Protocol> protocol = GetProtocol (ipHeader.GetProtocol (), iif);
+
+	if (protocol != 0)
+	{
+		// we need to make a copy in the unlikely event we hit the
+		// RX_ENDPOINT_UNREACH codepath
+		Ptr<Packet> copy = p->Copy ();
+		enum IpL4Protocol::RxStatus status = protocol->Receive (p, ipHeader, GetInterface (iif));
+		switch (status)
+		{
+			case IpL4Protocol::RX_OK:
+			// fall through
+			case IpL4Protocol::RX_ENDPOINT_CLOSED:
+			// fall through
+			case IpL4Protocol::RX_CSUM_FAILED:
+			break;
+			case IpL4Protocol::RX_ENDPOINT_UNREACH:
+			if (ipHeader.GetDestination ().IsBroadcast () == true ||
+				ipHeader.GetDestination ().IsMulticast () == true)
+			{
+				break; // Do not reply to broadcast or multicast
+			}
+			// Another case to suppress ICMP is a subnet-directed broadcast
+			bool subnetDirected = false;
+
+			for (uint32_t i = 0; i < GetNAddresses (iif); i++)
+			{
+				Ipv4InterfaceAddress addr = GetAddress (iif, i);
+				if (addr.GetLocal ().CombineMask (addr.GetMask ()) == ipHeader.GetDestination ().CombineMask (addr.GetMask ()) &&
+					ipHeader.GetDestination ().IsSubnetDirectedBroadcast (addr.GetMask ()))
+				{
+					subnetDirected = true;
+				}
+			}
+			if (subnetDirected == false)
+			{
+				GetIcmp ()->SendDestUnreachPort (ipHeader, copy);
+			}
+		}
+	}
 }
 
 bool

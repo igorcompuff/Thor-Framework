@@ -23,6 +23,8 @@
 #include "ns3/dynamic-retrans-ddsa-routing-protocol.h"
 #include "ns3/failing-ipv4-l3-protocol.h"
 #include "ns3/global-retrans-ddsa-ipv4-l3-protocol.h"
+#include "ns3/individual-retrans-ddsa-ipv4-l3-protocol.h"
+#include "ns3/flooding-ddsa-routing-protocol.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -51,6 +53,11 @@ struct LatencyInformation
       time_sent = Time::Max();
       time_received = Time::Max();;
     }
+
+    Time GetLatency()
+    {
+    	return time_received - time_sent;
+    }
 };
 
 struct AmiPacketInformation
@@ -61,7 +68,6 @@ struct AmiPacketInformation
     int nSent;
     LatencyInformation latency;
     bool received;
-    Ipv4Address gwAddress;
   public:
 
     AmiPacketInformation()
@@ -98,7 +104,7 @@ struct AmiPacketInformation
       this->latency = latency;
     }
 
-    LatencyInformation GetLatency()
+    LatencyInformation GetLatencyInfo()
     {
       return latency;
     }
@@ -125,16 +131,6 @@ struct AmiPacketInformation
     {
       return nSent;
     }
-
-    Ipv4Address GetGatwayAddress()
-    {
-    	return gwAddress;
-    }
-
-    void SetGatewayAddress(Ipv4Address address)
-    {
-    	gwAddress = address;
-    }
 };
 
 
@@ -151,14 +147,25 @@ class NeighborhoodAmiSim
 
 		enum ProtocolMode
 		{
-			ETX = 0, ORIGINAL_DDSA = 1, DUMB_DDSA = 2, DYNAMIC_RETRANS_DDSA = 3
+			ETX = 0, ORIGINAL_DDSA = 1, DUMB_DDSA = 2, DYNAMIC_RETRANS_DDSA = 3, FLOODING = 4
 		};
 
 		NeighborhoodAmiSim ();
 		virtual ~NeighborhoodAmiSim ();
 
 		void ConfigureSimulation(int argc, char *argv[]);
-		void GenerateSimulationSummary();
+
+
+		//Simulation Results
+		void GenerateSimulationPacketInfo();
+		void GenerateSimulationStatistcs();
+		double GetMeterRecoveryTime(uint16_t meterId);
+		double GetMeterMeanLatency(uint16_t meterId);
+		void GetMeterDeliveryRate(uint16_t meterId, double * beforeFailure, double * aftarFailure, double * total);
+		double GetMeterTotalReceivedPackets(uint16_t meterId);
+		uint64_t GetMeterTotalLatency(uint16_t meterId);
+		uint32_t GetTotalUnnecessaryCopies(uint16_t meterId);
+		uint32_t GetTotalSentMessages(uint16_t meterId);
 
 		//Tests
 
@@ -167,6 +174,7 @@ class NeighborhoodAmiSim
 		bool TestOriginalDdsaMeterStack();
 		bool TestDumbDdsaMeterStack();
 		bool TestDynamicDdsaMeterStack();
+		bool TestFloodingDdsaMeterStack();
 		bool TestDapsStack();
 
 		const double BEST_LINK = 112;//50.0;
@@ -188,6 +196,9 @@ class NeighborhoodAmiSim
 		void ConnectDdsaMetersSentPacketTrace();
 		void ConnectEtxMetersSentPacketTrace();
 		Ptr<Ipv4RoutingProtocol> GetNodeEffectiveRoutingProtocol(Ptr<Node> node);
+		int GetSimulationRound();
+		std::string GetSimulationDir();
+		Ptr<Node> GetNodeFromIpAddress(NetDeviceContainer devices, const Ipv4Address & address);
 
 		//Simulation Configuration
 
@@ -203,6 +214,7 @@ class NeighborhoodAmiSim
 		void InstallInternetStack(DDsaHelper & lqOlsrDapHelper, NodeContainer nodes, std::string ipv4l3ProtocolTid);
 		void ConfigureDapStack();
 		void ConfigureMeterStack();
+		void InstallFloodingMeterStack();
 		void InstallOriginalMeterStack();
 		void InstallDumbMeterStack();
 		void InstallNonDdsaMeterStack();
@@ -210,6 +222,8 @@ class NeighborhoodAmiSim
 		Ipv4ListRoutingHelper ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing);
 		void ConfigureControllerStack();
 		void ConfigureDapsHna();
+		void PopulateArpCache();
+		Ptr<ArpCache> CreatePopulatedArpCache(NodeContainer nodes);
 
 		//Topology Configuration
 
@@ -227,7 +241,7 @@ class NeighborhoodAmiSim
 		void ControllerReceivePacket (Ptr<Socket> socket);
 		void DapReceivedPacket (Ptr<Socket> socket);
 		void ExecuteFailure();
-
+		void Collision();
 
 		//Instance variables
 		std::string phyMode;
@@ -252,8 +266,10 @@ class NeighborhoodAmiSim
 		int totalDaps;
 		int totalMeters;
 		int totalControllers;
+		double alpha;
 		std::map<uint16_t, std::map<uint16_t, AmiPacketInformation> > packetsSent;
 		int ddsa_retrans;
+		uint64_t collisionCount;
 		Time failureTime;
 		Ptr<UniformRandomVariable> m_rnd;
 };
@@ -271,6 +287,8 @@ NeighborhoodAmiSim::NeighborhoodAmiSim (): phyMode ("DsssRate1Mbps")
     myLossModel = CreateObject<MatrixPropagationLossModel> ();
     failingDapId = -1;
     ddsaMode = 0; //Disabled
+    alpha = 0.0;
+    collisionCount = 0;
 }
 
 NeighborhoodAmiSim::~NeighborhoodAmiSim ()
@@ -287,6 +305,7 @@ NeighborhoodAmiSim::Parse(int argc, char *argv[])
   cmd.AddValue ("fmode", "Failure mode", failureMode);
   cmd.AddValue ("dap", "Failing DAP id", failingDapId);
   cmd.AddValue ("ddsamode", "DDSA mode of operation", ddsaMode);
+  cmd.AddValue ("alpha", "DDSA alpha", alpha);
 
   cmd.Parse (argc, argv);
 }
@@ -337,7 +356,7 @@ NeighborhoodAmiSim::ConnectDdsaMetersSentPacketTrace()
 	for(NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
 	{
 		Ptr<Node> meter = *it;
-		Ptr<GlobalRetransDdsaIpv4L3Protocol> leprot = meter->GetObject<GlobalRetransDdsaIpv4L3Protocol>();
+		Ptr<DdsaIpv4L3ProtocolBase> leprot = meter->GetObject<DdsaIpv4L3ProtocolBase>();
 		NS_ASSERT(leprot);
 		leprot->TraceConnectWithoutContext("L3tx", MakeCallback(&NeighborhoodAmiSim::DdsaApplicationPacketSent, this));
 	}
@@ -380,6 +399,64 @@ NeighborhoodAmiSim::GetNodeEffectiveRoutingProtocol(Ptr<Node> node)
 	return NULL;
 }
 
+char *
+CopyString(char * cstr)
+{
+	int totalChars = 0;
+	char * index = cstr;
+
+	while(*index != '\0')
+	{
+		index++;
+		totalChars++;
+	}
+
+	char * resultChar = (char *) malloc((totalChars + 1) * sizeof(char));
+	char * resultIndex = resultChar;
+	index = cstr;
+
+	for (int i = 1; i <= (totalChars + 1); i++)
+	{
+		*resultIndex = *index;
+
+		resultIndex++;
+		index++;
+	}
+
+	return resultChar;
+}
+
+Ptr<Node>
+NeighborhoodAmiSim::GetNodeFromIpAddress(NetDeviceContainer devices, const Ipv4Address & address)
+{
+	for (uint32_t i = 0; i < devices.GetN (); ++i)
+	{
+		Ptr<NetDevice> device = devices.Get (i);
+		Ptr<Ipv4> ipv4 = device->GetNode()->GetObject<Ipv4> ();
+		int32_t interface = ipv4->GetInterfaceForDevice(device);
+		Ipv4Address deviceAddress = ipv4->GetAddress(interface, 0).GetLocal();
+
+		if (deviceAddress == address)
+		{
+			return device->GetNode();
+		}
+	}
+
+	return NULL;
+}
+
+int
+NeighborhoodAmiSim::GetSimulationRound()
+{
+	char * strVar = CopyString(std::getenv("NS_GLOBAL_VALUE"));
+	char * strtk = strtok (strVar,"=");
+	strtk = strtok (NULL,"=");
+	int simRound = std::stoi(strtk, NULL);
+	free(strVar);
+
+	return simRound;
+}
+
 void
 NeighborhoodAmiSim::ConfigureSimulation(int argc, char *argv[])
 {
@@ -395,10 +472,11 @@ NeighborhoodAmiSim::ConfigureSimulation(int argc, char *argv[])
 	CreateControllerLan();
 	ConfigureNodesStack();
 	ConfigureIpAddressing();
+	PopulateArpCache();
 
 	uint16_t applicationPort = 80;
 	Time applicationStart = Seconds(100.0);
-	Time applicationStop = Seconds(200.0);
+	Time applicationStop = Seconds(490.0);
 
 	ConfigureMeterApplication(applicationPort, applicationStart, applicationStop);
 	ConfigureControllerSocket(applicationPort);
@@ -411,8 +489,8 @@ NeighborhoodAmiSim::ConfigureSimulation(int argc, char *argv[])
 void
 NeighborhoodAmiSim::ConfigureLogComponents()
 {
-	//LogComponentEnable("LqOlsrRoutingProtocol", LOG_LEVEL_ALL);
-	//LogComponentEnable("DdsaRoutingProtocolAdapter", LOG_LEVEL_DEBUG);
+	//LogComponentEnable("FailingIpv4L3Protocol", LOG_LEVEL_DEBUG);
+	//LogComponentEnable("GlobalRetransDdsaIpv4L3Protocol", LOG_LEVEL_DEBUG);
 	//LogComponentEnable("Etx", LOG_LEVEL_DEBUG);
 	//LogComponentEnable("MaliciousEtx", LOG_LEVEL_DEBUG);
 	//LogComponentEnable("YansWifiPhy", LOG_LEVEL_DEBUG);
@@ -664,6 +742,24 @@ NeighborhoodAmiSim::ConfigureWifi()
 	olsrDevices = wifi.Install (myWifiPhy, wifiMac, allOlsrNodes);
 	myWifiPhy.EnablePcap ("olsr-hna", olsrDevices, false);
 
+	for(NetDeviceContainer::Iterator it = olsrDevices.Begin(); it != olsrDevices.End(); it++)
+	{
+		Ptr<NetDevice> device = *it;
+		Ptr<WifiNetDevice> wifiDevice = DynamicCast<WifiNetDevice>(device);
+		if (wifiDevice)
+		{
+			Ptr<WifiMac> wifiMac = wifiDevice->GetMac();
+			Ptr<RegularWifiMac> regWifiMac = DynamicCast<RegularWifiMac>(wifiMac);
+
+			if (regWifiMac)
+			{
+				regWifiMac->GetDcaTxop()->TraceConnectWithoutContext("Collision", MakeCallback(&NeighborhoodAmiSim::Collision, this));
+				NS_ASSERT(regWifiMac->GetDcaTxop());
+			}
+		}
+
+	}
+
 }
 
 void
@@ -687,6 +783,67 @@ NeighborhoodAmiSim::ConfigureRouting(const Ipv4RoutingHelper & ipv4Routing)
 
   return list;
 }
+
+void
+NeighborhoodAmiSim::PopulateArpCache()
+{
+	NodeContainer nodes;
+	nodes.Add(meters);
+	nodes.Add(daps);
+	nodes.Add(controllers);
+
+	Ptr<ArpCache> arpcache = CreatePopulatedArpCache(nodes);
+
+	for (NodeContainer::Iterator it = nodes.Begin(); it != nodes.End(); ++it)
+	{
+		Ptr<Ipv4L3Protocol> ip = (*it)->GetObject<Ipv4L3Protocol> ();
+
+		NS_ASSERT(ip);
+
+		for (uint32_t interface = 0; interface < ip->GetNInterfaces(); interface++)
+		{
+				Ptr<Ipv4Interface> ipIface = ip->GetInterface(interface);
+				ipIface->SetArpCache(arpcache);
+		}
+	}
+}
+
+Ptr<ArpCache>
+NeighborhoodAmiSim::CreatePopulatedArpCache(NodeContainer nodes)
+{
+	Ptr<ArpCache> arpCache = CreateObject<ArpCache> ();
+
+	for (NodeContainer::Iterator it = nodes.Begin(); it != nodes.End(); ++it)
+	{
+		Ptr<Ipv4L3Protocol> ip = (*it)->GetObject<Ipv4L3Protocol> ();
+
+		NS_ASSERT(ip);
+
+		for (uint32_t interface = 0; interface < ip->GetNInterfaces(); interface++)
+		{
+			Ptr<Ipv4Interface> ipIface = ip->GetInterface(interface);
+			NS_ASSERT(ipIface != 0);
+			Ptr<NetDevice> device = ipIface->GetDevice();
+			NS_ASSERT(device != 0);
+			Mac48Address macaddr = Mac48Address::ConvertFrom(device->GetAddress ());
+
+			for(uint32_t i = 0; i < ipIface->GetNAddresses (); i ++)
+			{
+				Ipv4Address ipAddr = ipIface->GetAddress (i).GetLocal();
+
+				if(ipAddr != Ipv4Address::GetLoopback())
+				{
+						ArpCache::Entry * entry = arpCache->Add(ipAddr);
+						entry->SetMacAddresss(macaddr);
+						entry->MarkPermanent();
+				}
+			}
+		}
+	}
+
+	return arpCache;
+}
+
 
 void
 NeighborhoodAmiSim::InstallInternetStack(DDsaHelper & lqOlsrDapHelper, NodeContainer nodes, std::string ipv4l3ProtocolTid)
@@ -724,11 +881,20 @@ NeighborhoodAmiSim::ConfigureDapStack()
 }
 
 void
+NeighborhoodAmiSim::InstallFloodingMeterStack()
+{
+	DDsaHelper helper(Etx::GetTypeId(), FloodingDdsaRoutingProtocol::GetTypeId());
+	InstallInternetStack(helper, meters, "ns3::ddsa::IndividualRetransDdsaIpv4L3Protocol");
+
+	ConnectDdsaMetersSentPacketTrace();
+}
+
+void
 NeighborhoodAmiSim::InstallOriginalMeterStack()
 {
 	DDsaHelper helper(Etx::GetTypeId(), OriginalDdsaRoutingProtocol::GetTypeId());
 	helper.Set("Retrans", IntegerValue(ddsa_retrans));
-	helper.Set("Alpha", DoubleValue(0.0));
+	helper.Set("Alpha", DoubleValue(alpha));
 
 	InstallInternetStack(helper, meters, "ns3::ddsa::GlobalRetransDdsaIpv4L3Protocol");
 
@@ -740,7 +906,7 @@ NeighborhoodAmiSim::InstallDumbMeterStack()
 {
 	DDsaHelper helper(Etx::GetTypeId(), DumbDdsaRoutingProtocol::GetTypeId());
 	helper.Set("Retrans", IntegerValue(ddsa_retrans));
-	helper.Set("Alpha", DoubleValue(0.0));
+	helper.Set("Alpha", DoubleValue(alpha));
 
 	InstallInternetStack(helper, meters, "ns3::ddsa::GlobalRetransDdsaIpv4L3Protocol");
 
@@ -764,6 +930,7 @@ NeighborhoodAmiSim::InstallDynamicRetransDdsa()
 	helper.Set("Prob", DoubleValue(0.99)); //The intended delyvery probability must be 99%
 	helper.Set("Threshold", DoubleValue(0.1)); //Daps with delivery probability below 10% will be excluded
 	helper.Set("LinkTrans", IntegerValue(4)); //Link layer transmissions: 1 + 3 retransmissions
+	helper.Set("Alpha", DoubleValue(alpha));
 
 	InstallInternetStack(helper, meters, "ns3::ddsa::GlobalRetransDdsaIpv4L3Protocol");
 
@@ -797,6 +964,11 @@ NeighborhoodAmiSim::ConfigureMeterStack()
 		case ProtocolMode::DYNAMIC_RETRANS_DDSA:
 		{
 			InstallDynamicRetransDdsa();
+			break;
+		}
+		case ProtocolMode::FLOODING:
+		{
+			InstallFloodingMeterStack();
 			break;
 		}
 	}
@@ -969,8 +1141,9 @@ NeighborhoodAmiSim::DapReceivedPacket (Ptr<Socket> socket)
 	while ((packet = socket->RecvFrom (from)))
 	{
 		AmiHeader amiHeader;
-
 		packet->PeekHeader(amiHeader);
+
+		amiHeader.SetDapId(socket->GetNode()->GetId());
 
 		//uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
 		//NS_LOG_UNCOND ("Dap " << socket->GetNode()->GetId() << ": Received packet " << seqNumber << " at " << Simulator::Now().GetSeconds() << " seconds.");
@@ -994,14 +1167,21 @@ NeighborhoodAmiSim::DdsaApplicationPacketSent(Ptr<const Packet> packetSent, cons
 
 	if (amiHeader.GetReadingInfo() == 1)
 	{
-		uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-		uint16_t meterId = amiHeader.GetNodeId();
+		uint32_t seqNumber = amiHeader.GetPacketSequenceNumber();
+		uint32_t meterId = amiHeader.GetMeterId();
 
 		packetsSent[meterId][seqNumber].SetSeqNumber(seqNumber);
-		packetsSent[meterId][seqNumber].SetGatewayAddress(dapAddress);
 		packetsSent[meterId][seqNumber].Send();
 
-		//NS_LOG_UNCOND ("Application packet" << seqNumber << " sent by meter " << meterId << " at" << " at " << Simulator::Now().GetSeconds() << " seconds to DAP " << dapAddress);
+		if (dapAddress != Ipv4Address::GetAny())
+		{
+			uint32_t dapId = GetNodeFromIpAddress(olsrDevices, dapAddress)->GetId();
+			NS_LOG_UNCOND ("Application packet " << seqNumber << " sent by meter " << meterId << " at " << Simulator::Now().GetSeconds() << " seconds to DAP " << dapId);
+		}
+		else
+		{
+			NS_LOG_UNCOND ("Application packet " << seqNumber << " sent by meter " << meterId << " at " << Simulator::Now().GetSeconds() << " seconds");
+		}
 	}
 }
 
@@ -1023,16 +1203,25 @@ NeighborhoodAmiSim::ControllerReceivePacket (Ptr<Socket> socket)
 
 		if (amiHeader.GetReadingInfo() == 1)
 		{
-			uint16_t seqNumber = amiHeader.GetPacketSequenceNumber();
-			uint16_t meterId = amiHeader.GetNodeId();
+			uint32_t seqNumber = amiHeader.GetPacketSequenceNumber();
+			uint32_t meterId = amiHeader.GetMeterId();
+			uint32_t dapId = amiHeader.GetDapId();
 
 			if (!packetsSent[meterId][seqNumber].Received())
 			{
-				NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " sent by " << meterId << " at " << Simulator::Now().GetSeconds());
+				NS_LOG_UNCOND ("Controller: Received packet " << seqNumber << " sent by meter " << meterId
+															  << " through DAP " << dapId
+															  << " at " << Simulator::Now().GetSeconds());
 				packetsSent[meterId][seqNumber].Receive();
 			}
 			else
 			{
+				NS_LOG_UNCOND ("Controller: Received duplicated copy of packet " << seqNumber
+																				 << " sent by meter "
+																				 << meterId
+																				 << " through DAP "
+																				 << dapId
+																				 << " at " << Simulator::Now().GetSeconds());
 				packetsSent[meterId][seqNumber].IncrementReceived();
 			}
 		}
@@ -1041,6 +1230,12 @@ NeighborhoodAmiSim::ControllerReceivePacket (Ptr<Socket> socket)
 			NS_LOG_UNCOND ("Controller: Received non-ami packet at " << Simulator::Now().GetSeconds());
 		}
 	}
+}
+
+void
+NeighborhoodAmiSim::Collision()
+{
+	collisionCount++;
 }
 
 //Failure generation
@@ -1090,11 +1285,288 @@ NeighborhoodAmiSim::ExecuteFailure()
 
 //Statistics
 
+std::string
+NeighborhoodAmiSim::GetSimulationDir()
+{
+	std::string dir = "sim/";
+	int simulationRound = GetSimulationRound();
+
+	if (withFailure)
+	{
+		switch (failureMode)
+		{
+			case FailingIpv4L3Protocol::FailureType::FULL:
+			{
+				dir += "full_failure/";
+				break;
+			}
+			case FailingIpv4L3Protocol::FailureType::MALICIOUS:
+			{
+				dir += "malicious_failure/";
+				break;
+			}
+		}
+	}
+	else
+	{
+		dir += "no_failure/";
+	}
+
+	switch(ddsaMode)
+	{
+		case ProtocolMode::ETX:
+		{
+			dir += "etx/";
+			break;
+		}
+		case ProtocolMode::ORIGINAL_DDSA:
+		{
+			dir += "original/";
+			break;
+		}
+		case ProtocolMode::DUMB_DDSA:
+		{
+			dir += "dumb/";
+			break;
+		}
+		case ProtocolMode::DYNAMIC_RETRANS_DDSA:
+		{
+			dir += "dynamic_global/";
+			break;
+		}
+		case ProtocolMode::FLOODING:
+		{
+			dir += "flooding/";
+			break;
+		}
+	}
+
+
+
+	return dir + std::to_string(ddsa_retrans) + "/Round" + std::to_string(simulationRound) + "/";
+}
+
 void
-NeighborhoodAmiSim::GenerateSimulationSummary()
+NeighborhoodAmiSim::GetMeterDeliveryRate(uint16_t meterId, double * beforeFailure, double * aftarFailure, double * total)
+{
+	int totalSentBeforeFailure = 0;
+	int totalRecvBeforeFailure = 0;
+	int totalSentAfterFailure = 0;
+	int totalRecvAfterFailure = 0;
+
+	std::map<uint16_t, AmiPacketInformation> meterInfo = packetsSent[meterId];
+
+	for (std::map<uint16_t, AmiPacketInformation>::iterator it = meterInfo.begin(); it != meterInfo.end(); it++)
+	{
+		if (withFailure && it->second.GetLatencyInfo().time_sent < failureTime)
+		{
+			totalSentBeforeFailure++;
+
+			if (it->second.Received())
+			{
+				totalRecvBeforeFailure++;
+			}
+		}
+		else if (withFailure)
+		{
+			totalSentAfterFailure++;
+
+			if (it->second.Received())
+			{
+				totalRecvAfterFailure++;
+			}
+		}
+	}
+
+	*beforeFailure = (totalRecvBeforeFailure * 100) / (double)totalSentBeforeFailure;
+	*aftarFailure = (totalRecvAfterFailure * 100) / (double)totalSentAfterFailure;
+	*total = ((totalRecvAfterFailure + totalRecvBeforeFailure) * 100) / (double)(totalSentBeforeFailure + totalSentAfterFailure);
+}
+
+double
+NeighborhoodAmiSim::GetMeterMeanLatency(uint16_t meterId)
+{
+	int64_t totalLatency = 0;
+	int totalReceived = 0;
+	std::map<uint16_t, AmiPacketInformation> meterInfo = packetsSent[meterId];
+
+	for (std::map<uint16_t, AmiPacketInformation>::iterator it = meterInfo.begin(); it != meterInfo.end(); it++)
+	{
+		if (it->second.Received())
+		{
+			totalReceived++;
+			totalLatency += it->second.GetLatencyInfo().GetLatency().GetMilliSeconds();
+		}
+	}
+
+	return totalReceived != 0 ? (double)totalLatency / totalReceived : Time::Max().GetSeconds();
+}
+
+double
+NeighborhoodAmiSim::GetMeterRecoveryTime(uint16_t meterId)
+{
+	Time lastReceivedTime;
+
+	std::map<uint16_t, AmiPacketInformation> meterInfo = packetsSent[meterId];
+
+	for (std::map<uint16_t, AmiPacketInformation>::iterator it = meterInfo.begin(); it != meterInfo.end(); it++)
+	{
+		if (it->second.Received())
+		{
+			if (it->second.GetLatencyInfo().time_received.GetSeconds() <= failureTime.GetSeconds())
+			{
+				lastReceivedTime = it->second.GetLatencyInfo().time_received;
+			}
+			else
+			{
+				double unavailabilityTime = it->second.GetLatencyInfo().time_received.GetSeconds() - lastReceivedTime.GetSeconds();
+
+				//Estou supondo que os pacotes são enviados a cada 3 segundos
+				if (unavailabilityTime < 6.0)
+				{
+					unavailabilityTime = 0.0;
+				}
+
+				return unavailabilityTime;
+			}
+		}
+	}
+
+	return Time::Max().GetSeconds();
+}
+
+double
+NeighborhoodAmiSim::GetMeterTotalReceivedPackets(uint16_t meterId)
+{
+	int totalReceived = 0;
+	std::map<uint16_t, AmiPacketInformation> meterInfo = packetsSent[meterId];
+
+	for (std::map<uint16_t, AmiPacketInformation>::iterator it = meterInfo.begin(); it != meterInfo.end(); it++)
+	{
+		if (it->second.Received())
+		{
+			totalReceived++;
+		}
+	}
+
+	return totalReceived;
+}
+
+uint64_t
+NeighborhoodAmiSim::GetMeterTotalLatency(uint16_t meterId)
+{
+	uint64_t totalLatency = 0;
+	std::map<uint16_t, AmiPacketInformation> meterInfo = packetsSent[meterId];
+
+	for (std::map<uint16_t, AmiPacketInformation>::iterator it = meterInfo.begin(); it != meterInfo.end(); it++)
+	{
+		if (it->second.Received())
+		{
+			totalLatency += it->second.GetLatencyInfo().GetLatency().GetMilliSeconds();
+		}
+	}
+
+	return totalLatency;
+}
+
+uint32_t
+NeighborhoodAmiSim::GetTotalUnnecessaryCopies(uint16_t meterId)
+{
+	uint32_t totalUnnecessaryCopies = 0;
+	std::map<uint16_t, AmiPacketInformation> meterInfo = packetsSent[meterId];
+
+	for (std::map<uint16_t, AmiPacketInformation>::iterator it = meterInfo.begin(); it != meterInfo.end(); it++)
+	{
+		if (it->second.Received())
+		{
+			totalUnnecessaryCopies += it->second.GetNReceived() - 1;
+		}
+	}
+
+	return totalUnnecessaryCopies;
+}
+
+uint32_t
+NeighborhoodAmiSim::GetTotalSentMessages(uint16_t meterId)
+{
+	uint32_t totalSentMessages = 0;
+	std::map<uint16_t, AmiPacketInformation> meterInfo = packetsSent[meterId];
+
+	for (std::map<uint16_t, AmiPacketInformation>::iterator it = meterInfo.begin(); it != meterInfo.end(); it++)
+	{
+		totalSentMessages += it->second.GetNSent();
+	}
+
+	return totalSentMessages;
+}
+
+void
+NeighborhoodAmiSim::GenerateSimulationStatistcs()
 {
 	std::ofstream statFile;
-	statFile.open("packets.txt");
+	double beforeFailure;
+	double afterFailure;
+	double total;
+	double meanLatency;
+	double unavailabilityTime;
+	int totalReceived = 0;
+	int totalSent = 0;
+	uint64_t totalLatency = 0;
+	//uint32_t totalUnecessaryCopies = 0;
+	uint32_t totalSentMessages = 0;
+
+	std::string simulationDir = GetSimulationDir();
+	std::string filename = simulationDir + "stat.txt";
+	statFile.open(filename);
+
+	for (std::map<uint16_t, std::map<uint16_t, AmiPacketInformation> >::iterator it = packetsSent.begin(); it != packetsSent.end(); it++)
+	{
+		uint16_t meterId = it->first;
+		GetMeterDeliveryRate(meterId, &beforeFailure, &afterFailure, &total);
+		meanLatency = GetMeterMeanLatency(it->first);
+		unavailabilityTime = GetMeterRecoveryTime(it->first);
+		totalReceived += GetMeterTotalReceivedPackets(it->first);
+		totalSent += it->second.size();
+		totalLatency += GetMeterTotalLatency(it->first);
+		//totalUnecessaryCopies += GetTotalUnnecessaryCopies(meterId);
+		totalSentMessages += GetTotalSentMessages(meterId);
+
+		statFile << "Meter " << it->first << "\n";
+		statFile << "Delivey Rate: " << total << "%\n";
+		statFile << "Delivey Rate (Before Failure): " << beforeFailure << "%\n";
+		statFile << "Delivey Rate (After Failure): " << afterFailure << "%\n";
+
+		if ( meanLatency != Time::Max().GetSeconds())
+		{
+			statFile << "Mean Latency: " << meanLatency << " ms\n";
+		}
+
+		if (unavailabilityTime != Time::Max().GetSeconds())
+		{
+			statFile << "Recovery time: " << unavailabilityTime << " s\n\n";
+		}
+		else
+		{
+			statFile << "Recovery time: Infinity" << "\n\n";
+		}
+	}
+
+	statFile << "Total Delivey Rate: " << (totalReceived * 100) / (double)totalSent << "%\n";
+	statFile << "Total Mean Latency: " << (double)totalLatency / totalReceived << " ms\n";
+	statFile << "Total Collisions: " << collisionCount << "\n";
+	statFile << "Total sent messages: " << totalSentMessages << "\n";
+
+	statFile.close();
+}
+
+void
+NeighborhoodAmiSim::GenerateSimulationPacketInfo()
+{
+	std::ofstream packetsFile;
+	std::string simulationDir = GetSimulationDir();
+	std::string filename =  simulationDir + "packets.txt";
+
+	packetsFile.open(filename);
 
 
 	for (std::map<uint16_t, std::map<uint16_t, AmiPacketInformation> >::iterator it = packetsSent.begin(); it != packetsSent.end(); it++)
@@ -1102,38 +1574,37 @@ NeighborhoodAmiSim::GenerateSimulationSummary()
 
 		std::map<uint16_t, AmiPacketInformation> sent = it->second;
 
-		statFile << "Packets sent by meter " << it->first << "\n\n";
+		packetsFile << "\nPackets sent by meter " << it->first << "\n\n";
 
 		for (std::map<uint16_t, AmiPacketInformation>::iterator info = sent.begin(); info != sent.end(); info++)
 		{
-			statFile << "Packet " << info->second.GetSeqNumber() << " -----------------------";
-			statFile << (info->second.Received() ? "\n" : "(Lost)\n");
+			packetsFile << "\nPacket " << info->second.GetSeqNumber() << " -----------------------";
+			packetsFile << (info->second.Received() ? "\n" : "(Lost)\n");
 
-			statFile << "Sent at: " << info->second.GetLatency().time_sent.GetSeconds() << " seconds\n";
+			packetsFile << "Sent at: " << info->second.GetLatencyInfo().time_sent.GetSeconds() << " seconds\n";
 
 			if (info->second.Received())
 			{
-				int64_t latency = info->second.GetLatency().time_received.GetMilliSeconds() - info->second.GetLatency().time_sent.GetMilliSeconds();
+				packetsFile << "Received at: " << info->second.GetLatencyInfo().time_received.GetSeconds() << " seconds";
 
-				statFile << "Received at: " << info->second.GetLatency().time_received.GetSeconds() << " seconds";
-
-				if (withFailure && info->second.GetLatency().time_received >= failureTime)
+				if (withFailure && info->second.GetLatencyInfo().time_received >= failureTime)
 				{
-					statFile << "(After failure)\n";
+					packetsFile << "(After failure)\n";
 				}
 				else
 				{
-					statFile << "\n";
+					packetsFile << "\n";
 				}
 
-				statFile << "Latency: " << latency << "ms \n";
-				statFile << "Received copies: " << info->second.GetNReceived() << "\n";
-				//statFile << "Sent copies: " << info->second.GetNSent() << "\n\n";
+				packetsFile << "Latency: " << info->second.GetLatencyInfo().GetLatency() << "ms \n";
+				packetsFile << "Received copies: " << info->second.GetNReceived() << "\n";
+				packetsFile << "Sent copies: " << info->second.GetNSent() << "\n";
+				packetsFile << "Unneessary copies: " << info->second.GetNReceived() - 1 << "\n";
 			}
 		}
 	}
 
-	statFile.close();
+	packetsFile.close();
 }
 
 //Tests
@@ -1216,6 +1687,25 @@ NeighborhoodAmiSim::TestDynamicDdsaMeterStack()
 }
 
 bool
+NeighborhoodAmiSim::TestFloodingDdsaMeterStack()
+{
+	bool metersComply = true;
+
+	for (NodeContainer::Iterator it = meters.Begin(); it != meters.End(); it++)
+	{
+		Ptr<Node> meter = *it;
+
+		Ptr<IndividualRetransDdsaIpv4L3Protocol> ddsaL3Prot = meter->GetObject<IndividualRetransDdsaIpv4L3Protocol>();
+
+		Ptr<Ipv4RoutingProtocol> rp = GetNodeEffectiveRoutingProtocol(meter);
+
+		metersComply = ddsaL3Prot && DynamicCast<FloodingDdsaRoutingProtocol> (rp);
+	}
+
+	return metersComply;
+}
+
+bool
 NeighborhoodAmiSim::TestDapsStack()
 {
 	bool dapsComply = true;
@@ -1259,6 +1749,11 @@ NeighborhoodAmiSim::TestStack()
 			NS_ASSERT_MSG(TestDynamicDdsaMeterStack(), "There is a problem with Dynamic DDSA meter stack");
 			break;
 		}
+		case ProtocolMode::FLOODING:
+		{
+			NS_ASSERT_MSG(TestFloodingDdsaMeterStack(), "There is a problem with Dynamic DDSA meter stack");
+			break;
+		}
 	}
 
 	NS_ASSERT_MSG(TestDapsStack(), "There is a problem daps stack");
@@ -1267,17 +1762,28 @@ NeighborhoodAmiSim::TestStack()
 
 int main (int argc, char *argv[])
 {
-	NeighborhoodAmiSim simulation;
+	try
+	{
+		NeighborhoodAmiSim simulation;
 
-	simulation.ConfigureSimulation(argc, argv);
-	simulation.TestStack();
+		simulation.ConfigureSimulation(argc, argv);
+		simulation.TestStack();
 
-	Simulator::Stop (Seconds (250.0));
-	Simulator::Run ();
+		Simulator::Stop (Seconds (500.0));
+		Simulator::Run ();
 
-	simulation.GenerateSimulationSummary();
+		NS_LOG_UNCOND("Simulation finished. Creating statistics.");
 
-	Simulator::Destroy ();
+		simulation.GenerateSimulationPacketInfo();
+		simulation.GenerateSimulationStatistcs();
+
+		Simulator::Destroy ();
+	}
+	catch (const std::exception & ex)
+	{
+		std::cerr << ex.what() << "\n";
+		return 1;
+	}
 
 	return 0;
 }

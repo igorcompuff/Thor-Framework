@@ -2,7 +2,6 @@
 #ifndef GLOBAL_RETRANS_DDSA_ROUTING_PROTOCOL_H
 #define GLOBAL_RETRANS_DDSA_ROUTING_PROTOCOL_H
 
-//#include "ns3/lq-olsr-routing-protocol.h"
 #include "ns3/ddsa-routing-protocol-base.h"
 #include "ns3/simulator.h"
 
@@ -22,7 +21,7 @@ namespace ns3 {
 
 				GlobalRetransDdsaRoutingProtocolBase ();
 				virtual ~GlobalRetransDdsaRoutingProtocolBase ();
-				virtual int GetTotalRetransmissions() = 0;
+				virtual int GetTotalTransmissions() = 0;
 		};
 
 	}

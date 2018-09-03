@@ -22,18 +22,20 @@ namespace ns3 {
 
 				DynamicRetransDdsaRoutingProtocol ();
 				virtual ~DynamicRetransDdsaRoutingProtocol ();
-				virtual int GetTotalRetransmissions();
+				virtual int GetTotalTransmissions();
 
 			protected:
 				virtual bool MustExclude(Dap dap);
 				virtual void InitializeDestinations();
-				virtual void UpdateDestination(lqolsr::DestinationTuple & tuple, const Ipv4Address & destAddress, float newCost, const lqolsr::LinkTuple * accessLink, int hopCount);
+				virtual float UpdateDestination(lqolsr::DestinationTuple & tupleToUpdate, const lqolsr::DestinationTuple & destinationFound, const lqolsr::TopologyTuple & topTuple);
 
 			private:
 
 				void InitializeDeliveryProbabilities();
 				double CalculateLinkDeliveryProbability(float linkEtx);
 				double CalculateOneShootDeliveryProbability();
+				bool ShouldConsiderDap(const Ipv4Address & dapAddress);
+				bool DapExists(const Ipv4Address & dapAddress);
 
 				double m_targetProbability;
 				double m_thresholdProbability;

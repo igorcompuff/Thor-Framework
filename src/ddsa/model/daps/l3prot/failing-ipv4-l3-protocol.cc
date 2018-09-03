@@ -98,7 +98,7 @@ namespace ns3 {
 				switch(m_failureType)
 				{
 					case FailureType::FULL: shouldFail = true; break;
-					case FailureType::MALICIOUS: shouldFail = IsApplicationPacket(packet->Copy(), false); break;
+					case FailureType::MALICIOUS: shouldFail = IsApplicationPacket(packet->Copy(), received); break;
 				}
 			}
 

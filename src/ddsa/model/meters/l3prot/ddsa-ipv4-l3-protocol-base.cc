@@ -17,7 +17,10 @@ namespace ns3 {
 			static TypeId tid = TypeId ("ns3::ddsa::DdsaIpv4L3ProtocolBase")
 			.SetParent<Ipv4L3Protocol> ()
 			.SetGroupName ("Ddsa")
-			.AddConstructor<DdsaIpv4L3ProtocolBase> ();
+			.AddConstructor<DdsaIpv4L3ProtocolBase> ()
+			.AddTraceSource ("L3tx", "Packet is sent forward",
+							  MakeTraceSourceAccessor (&DdsaIpv4L3ProtocolBase::m_txTrace),
+							  "ns3::ddsa::PacketSentTracedCallback");
 
 			return tid;
 		}

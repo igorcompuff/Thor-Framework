@@ -65,7 +65,7 @@ class AmiApplication : public Application
 
 
   private:
-    uint16_t m_seqNumber;
+    uint32_t m_seqNumber;
     Ptr<Socket> m_socket;       //!< Associated socket
     Address m_peer;         //!< Peer address
     TypeId m_socketTid;

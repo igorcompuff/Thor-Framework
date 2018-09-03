@@ -79,6 +79,7 @@ public:
    * packet transmission was failed.
    */
   typedef Callback <void, const WifiMacHeader&> TxFailed;
+  typedef void (* CollisionTracedCallback)();
 
   DcaTxop ();
   ~DcaTxop ();
@@ -336,6 +337,7 @@ private:
   Ptr<const Packet> m_currentPacket;
   WifiMacHeader m_currentHdr;
   uint8_t m_fragmentNumber;
+  TracedCallback<> m_collisionTrace;
 };
 
 } //namespace ns3

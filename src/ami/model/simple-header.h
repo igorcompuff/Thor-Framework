@@ -35,9 +35,13 @@ namespace ami {
       0                   1                   2                   3
       0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |         Sequence Number       |            Meter ID	     |
+     |                        Sequence Number           	         |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     |                             Reading                           |
+     |                           Meter ID                            |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                           DAP ID                              |
+     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     |                           Reading                             |
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
     \endverbatim
@@ -48,15 +52,35 @@ namespace ami {
     AmiHeader ();
     virtual ~AmiHeader ();
 
-    void SetNodeId (uint16_t id)
+    void SetPacketSequenceNumber (uint32_t seqnum)
+	{
+	  m_packetSequenceNumber = seqnum;
+	}
+
+	uint32_t GetPacketSequenceNumber () const
+	{
+	  return m_packetSequenceNumber;
+	}
+
+    void SetMeterId (uint32_t id)
     {
-      m_nodeId = id;
+    	m_meterId = id;
     }
 
-    uint16_t GetNodeId () const
+    uint32_t GetMeterId () const
     {
-      return m_nodeId;
+      return m_meterId;
     }
+
+    void SetDapId (uint32_t id)
+	{
+		m_dapId = id;
+	}
+
+    uint32_t GetDapId () const
+	{
+	  return m_dapId;
+	}
 
     void SetReadingInfo(uint32_t info)
     {
@@ -68,27 +92,12 @@ namespace ami {
       return m_readingInfo;
     }
 
-    /**
-     * Set the packet sequence number.
-     * \param seqnum The packet sequence number.
-     */
-    void SetPacketSequenceNumber (uint16_t seqnum)
-    {
-      m_packetSequenceNumber = seqnum;
-    }
 
-    /**
-     * Get the packet sequence number.
-     * \returns The packet sequence number.
-     */
-    uint16_t GetPacketSequenceNumber () const
-    {
-      return m_packetSequenceNumber;
-    }
 
   private:
-    uint16_t m_packetSequenceNumber;  //!< The packet sequence number.
-    uint16_t m_nodeId;
+    uint32_t m_packetSequenceNumber;  //!< The packet sequence number.
+    uint32_t m_meterId;
+    uint32_t m_dapId;
     uint32_t m_readingInfo;
 
   public:

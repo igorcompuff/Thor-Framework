@@ -749,12 +749,21 @@ RoutingProtocol::GetMinDestination()
   return selectedIndex;
 }
 
-void
-RoutingProtocol::UpdateDestination(DestinationTuple & tuple, const Ipv4Address & destAddress, float newCost, const LinkTuple * accessLink, int hopCount)
+float
+RoutingProtocol::UpdateDestination(DestinationTuple & tupleToUpdate, const DestinationTuple & destinationFound, const TopologyTuple & topTuple)
 {
-	m_costs[destAddress] = newCost;
-	tuple.accessLink = accessLink;
-	tuple.hopCount = hopCount;
+	float currentCost = m_costs[topTuple.destAddr];
+	float newCost = m_metric->Compound(m_costs[topTuple.lastAddr], topTuple.cost);
+
+	if (m_metric->CompareBest(newCost, currentCost) > 0)
+	{
+		m_costs[topTuple.destAddr] = newCost;
+		tupleToUpdate.accessLink = destinationFound.accessLink;
+		tupleToUpdate.hopCount = destinationFound.hopCount + 1;
+		return newCost;
+	}
+
+	return -1;
 }
 
 void
@@ -776,7 +785,8 @@ RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple & dest)
 
 		if (top->lastAddr == dest.destAddress)
 		{
-			float currentCost = m_costs[top->destAddr];
+			UpdateDestination(*it, dest, *top);
+/*			float currentCost = m_costs[top->destAddr];
 			float newCost = m_metric->Compound(m_costs[dest.destAddress], top->cost);
 
 			if (m_metric->CompareBest(newCost, currentCost) > 0)
@@ -786,8 +796,8 @@ RoutingProtocol::UpdateDestinationNeighbors(const DestinationTuple & dest)
 				//m_costs[top->destAddr] = newCost;
 				//m_delivery_probs[top->destAddr] = m_delivery_probs[dest.destAddress] * 1 / top->cost;
 				//it->accessLink = dest.accessLink;
-				//it->hopCount = dest.hopCount + 1;
-			}
+				it->hopCount = dest.hopCount + 1;
+			}*/
 		}
 	}
 }

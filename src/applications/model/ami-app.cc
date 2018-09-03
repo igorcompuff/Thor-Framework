@@ -105,7 +105,7 @@ AmiApplication::SendPacket ()
 
   ami::AmiHeader header;
   header.SetPacketSequenceNumber(m_seqNumber++);
-  header.SetNodeId(m_node->GetId());
+  header.SetMeterId(m_node->GetId());
   header.SetReadingInfo(1);//m_rnd->GetInteger());
 
   packet->AddHeader(header);

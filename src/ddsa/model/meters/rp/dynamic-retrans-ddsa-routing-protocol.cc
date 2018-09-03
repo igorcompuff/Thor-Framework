@@ -53,15 +53,30 @@ namespace ns3 {
 		bool
 		DynamicRetransDdsaRoutingProtocol::MustExclude(Dap dap)
 		{
-			return m_delivery_probs[dap.GetAddress()] < m_thresholdProbability && ((m_gateways.size() - 1) >= GetMinRedundancy());
+			return OriginalDdsaRoutingProtocol::MustExclude(dap);
+			/*bool exclude = !ShouldConsiderDap(dap.GetAddress());
+
+			if (exclude)
+			{
+				NS_LOG_DEBUG("Dap " << dap.GetAddress() << " with cost "
+														<< GetCostToDestination(dap.GetAddress())
+														<< " will be excluded. Delivery prob = "
+														<< m_delivery_probs[dap.GetAddress()]
+																			<< "\n");
+			}
+
+			return exclude;*/
 		}
 
 		int
-		DynamicRetransDdsaRoutingProtocol::GetTotalRetransmissions()
+		DynamicRetransDdsaRoutingProtocol::GetTotalTransmissions()
 		{
 			int totalRetrans = (int)std::ceil(std::log10(1 - m_targetProbability) / std::log10(1 - CalculateOneShootDeliveryProbability()));
+			int maxTotalRetrans = std::max(OriginalDdsaRoutingProtocol::GetTotalTransmissions(), totalRetrans);
 
-			return std::max(OriginalDdsaRoutingProtocol::GetTotalRetransmissions(), totalRetrans);
+			NS_LOG_DEBUG("Total Transmissions = " << maxTotalRetrans);
+
+			return maxTotalRetrans;
 		}
 
 		double
@@ -79,7 +94,10 @@ namespace ns3 {
 			double summation = 0.0;
 			for(std::vector<Dap>::iterator dap = m_gateways.begin(); dap != m_gateways.end(); dap++)
 			{
-				summation += dap->GetProbability() * m_delivery_probs[dap->GetAddress()];
+				if (!dap->IsExcluded())
+				{
+					summation += dap->GetProbability() * m_delivery_probs[dap->GetAddress()];
+				}
 			}
 
 			return summation;
@@ -106,6 +124,14 @@ namespace ns3 {
 			}
 		}
 
+		bool
+		DynamicRetransDdsaRoutingProtocol::ShouldConsiderDap(const Ipv4Address & dapAddress)
+		{
+			unsigned int totalNotExcludedDaps = GetTotalNotExcludedDaps();
+
+			return (m_delivery_probs[dapAddress] >= m_thresholdProbability) || ((totalNotExcludedDaps - 1) < GetMinRedundancy());
+		}
+
 		void
 		DynamicRetransDdsaRoutingProtocol::InitializeDestinations()
 		{
@@ -114,12 +140,33 @@ namespace ns3 {
 			InitializeDeliveryProbabilities();
 		}
 
-		void
-		DynamicRetransDdsaRoutingProtocol::UpdateDestination(lqolsr::DestinationTuple & tuple, const Ipv4Address & destAddress, float newCost, const lqolsr::LinkTuple * accessLink, int hopCount)
+		float
+		DynamicRetransDdsaRoutingProtocol::UpdateDestination(lqolsr::DestinationTuple & tupleToUpdate, const lqolsr::DestinationTuple & destinationFound, const lqolsr::TopologyTuple & topTuple)
 		{
-			OriginalDdsaRoutingProtocol::UpdateDestination(tuple, destAddress, newCost, accessLink, hopCount);
+			float newCost = OriginalDdsaRoutingProtocol::UpdateDestination(tupleToUpdate, destinationFound, topTuple);
 
-			m_delivery_probs[destAddress] = m_delivery_probs[tuple.destAddress] * CalculateLinkDeliveryProbability(newCost);
+			if (newCost >= 0)
+			{
+				m_delivery_probs[topTuple.destAddr] = m_delivery_probs[topTuple.lastAddr] * CalculateLinkDeliveryProbability(newCost);
+			}
+
+			return newCost;
+		}
+
+		bool
+		DynamicRetransDdsaRoutingProtocol::DapExists(const Ipv4Address & dapAddress)
+		{
+			bool result = false;
+
+			for(std::vector<Dap>::iterator dap = m_gateways.begin(); dap != m_gateways.end(); dap++)
+			{
+				if (dap->GetAddress() == dapAddress)
+				{
+					result = true;
+				}
+			}
+
+			return result;
 		}
 	}
 }
