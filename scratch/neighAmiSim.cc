@@ -1596,7 +1596,7 @@ NeighborhoodAmiSim::GenerateSimulationPacketInfo()
 					packetsFile << "\n";
 				}
 
-				packetsFile << "Latency: " << info->second.GetLatencyInfo().GetLatency() << "ms \n";
+				packetsFile << "Latency: " << info->second.GetLatencyInfo().GetLatency().GetMilliSeconds() << "ms \n";
 				packetsFile << "Received copies: " << info->second.GetNReceived() << "\n";
 				packetsFile << "Sent copies: " << info->second.GetNSent() << "\n";
 				packetsFile << "Unneessary copies: " << info->second.GetNReceived() - 1 << "\n";

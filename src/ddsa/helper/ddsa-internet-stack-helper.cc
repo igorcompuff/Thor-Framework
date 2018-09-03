@@ -36,7 +36,6 @@ NS_LOG_COMPONENT_DEFINE ("DdsaInternetStackHelper");
 DdsaInternetStackHelper::DdsaInternetStackHelper (): InternetStackHelper()
 
 {
-  nodeType = ddsa::DdsaRoutingProtocolAdapter::NodeType::METER;
   ipv4l3ProtTypeId = "ns3::ddsa::Ipv4L3ProtocolDdsaAdapter";
 }
 
@@ -47,7 +46,7 @@ DdsaInternetStackHelper::~DdsaInternetStackHelper ()
 
 DdsaInternetStackHelper::DdsaInternetStackHelper (const DdsaInternetStackHelper &o): InternetStackHelper(o)
 {
-  nodeType = o.nodeType;
+
 }
 
 DdsaInternetStackHelper &
@@ -55,12 +54,6 @@ DdsaInternetStackHelper::operator = (const DdsaInternetStackHelper &o)
 {
   InternetStackHelper::operator=(o);
   return *this;
-}
-
-void
-DdsaInternetStackHelper::SetNodeType(ddsa::DdsaRoutingProtocolAdapter::NodeType nt)
-{
-  nodeType = nt;
 }
 
 void
