@@ -23,7 +23,6 @@
 #include "ns3/log.h"
 #include "ns3/object.h"
 #include "ns3/node.h"
-#include "ns3/ipv4-l3-protocol-ddsa-adapter.h"
 #include "ddsa-internet-stack-helper.h"
 
 
