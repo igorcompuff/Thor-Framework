@@ -6,6 +6,7 @@ SimBaseDir=$3
 RoundStart=$4
 RoundStop=$5
 Retrans=$6
+Dap=$7
 
 if [ "$FailureType" = "full_failure" ]
 then
@@ -46,5 +47,5 @@ do
 	echo "Exec round $i"
 	SimPath=$SimBaseDir/$FailureType/$DdsaType/Round$i
 	echo $SimPath
-	NS_GLOBAL_VALUE="RngRun=$i" ./waf --run "neighAmiSim --retrans=$Retrans --failure=$WithFailure --senders=* --fmode=$FailureInt --ddsamode=$DdsaInt --dap=4" &> $SimPath/log.txt
+	NS_GLOBAL_VALUE="RngRun=$i" ./waf --run "neighAmiSim --retrans=$Retrans --failure=$WithFailure --senders=* --fmode=$FailureInt --ddsamode=$DdsaInt --dap=$Dap" &> $SimPath/log.txt
 done

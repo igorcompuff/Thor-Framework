@@ -1188,7 +1188,7 @@ NeighborhoodAmiSim::DdsaApplicationPacketSent(Ptr<const Packet> packetSent, cons
 void
 NeighborhoodAmiSim::EtxAplicationPacketSent(const Ipv4Header & header, Ptr<const Packet> packet, uint32_t intId)
 {
-	DdsaApplicationPacketSent(packet, Ipv4Address::GetAny());
+	DdsaApplicationPacketSent(packet, Ipv4Address::GetBroadcast());
 }
 
 void
