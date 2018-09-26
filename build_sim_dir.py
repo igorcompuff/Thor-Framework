@@ -30,9 +30,9 @@ class SimDirCreator:
 
         filepath = "/home/igorribeiro/github/ns-3.26/"
         for d in basedirs:
-            for i in range(2, 16):
-                path = os.path.join(d, str(i))
-                self.createRounds(filepath + path)
+            #for i in range(2, 16):
+            #    path = os.path.join(d, str(i))
+            self.createRounds(filepath + d)
             #print basedirs[i] + "\n\n"
 
 def parse():
