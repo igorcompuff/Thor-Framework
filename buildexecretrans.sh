@@ -4,6 +4,7 @@ DdsaType=$1
 RoundStart=$2
 RoundStop=$3
 RetransStart=$4
+RetransStop=$5
 
 if [ "$DdsaType" = "original" ]
 then
@@ -13,7 +14,7 @@ then
 	DdsaInt=2
 fi
 
-for ((ret = $RetransStart; ret <= 15; ret++))
+for ((ret = $RetransStart; ret <= $RetransStop; ret++))
 do
 	echo "Exec Retrans $ret"
 	for ((i = $RoundStart; i <= $RoundStop; i++))

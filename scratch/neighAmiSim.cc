@@ -1173,7 +1173,7 @@ NeighborhoodAmiSim::DdsaApplicationPacketSent(Ptr<const Packet> packetSent, cons
 		packetsSent[meterId][seqNumber].SetSeqNumber(seqNumber);
 		packetsSent[meterId][seqNumber].Send();
 
-		if (dapAddress != Ipv4Address::GetAny())
+		if (dapAddress != Ipv4Address::GetBroadcast())
 		{
 			uint32_t dapId = GetNodeFromIpAddress(olsrDevices, dapAddress)->GetId();
 			NS_LOG_UNCOND ("Application packet " << seqNumber << " sent by meter " << meterId << " at " << Simulator::Now().GetSeconds() << " seconds to DAP " << dapId);
