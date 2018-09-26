@@ -150,7 +150,7 @@ namespace ns3 {
 			double prob_sum = 0;
 			bool selected = false;
 
-			std::vector<Dap>::iterator it = m_gateways.begin();
+			//std::vector<Dap>::iterator it = m_gateways.begin();
 
 			for (std::vector<Dap>::iterator it = m_gateways.begin(); (it != m_gateways.end() && !selected); it++)
 			{
