@@ -20,6 +20,7 @@ do
 	do
 		echo "Exec round $i"
 		SimPath=sim/full_failure/$DdsaType/$ret/Round$i
+		echo $SimPath
 		NS_GLOBAL_VALUE="RngRun=$i" ./waf --run "neighAmiSim --retrans=$ret --failure=1 --senders=* --fmode=0 --ddsamode=$DdsaInt --dap=4" &> $SimPath/log.txt
 	done
 done
