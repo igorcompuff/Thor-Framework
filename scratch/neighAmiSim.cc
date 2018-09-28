@@ -161,7 +161,8 @@ class NeighborhoodAmiSim
 		void GenerateSimulationStatistcs();
 		double GetMeterRecoveryTime(uint16_t meterId);
 		double GetMeterMeanLatency(uint16_t meterId);
-		void GetMeterDeliveryRate(uint16_t meterId, double * beforeFailure, double * aftarFailure, double * total);
+		double GetMeterDeliveryRateNoFailure(uint16_t meterId);
+		void GetMeterDeliveryRateWithFailure(uint16_t meterId, double * beforeFailure, double * aftarFailure, double * total);
 		double GetMeterTotalReceivedPackets(uint16_t meterId);
 		uint64_t GetMeterTotalLatency(uint16_t meterId);
 		uint32_t GetTotalUnnecessaryCopies(uint16_t meterId);
@@ -1347,8 +1348,29 @@ NeighborhoodAmiSim::GetSimulationDir()
 	return dir + "/Round" + std::to_string(simulationRound) + "/";
 }
 
+double
+NeighborhoodAmiSim::GetMeterDeliveryRateNoFailure(uint16_t meterId)
+{
+	int totalSent = 0;
+	int totalRecv = 0;
+
+	std::map<uint16_t, AmiPacketInformation> meterInfo = packetsSent[meterId];
+
+	for (std::map<uint16_t, AmiPacketInformation>::iterator it = meterInfo.begin(); it != meterInfo.end(); it++)
+	{
+		totalSent++;
+
+		if (it->second.Received())
+		{
+			totalRecv++;
+		}
+	}
+
+	return 100.0 * (totalRecv / totalSent);
+}
+
 void
-NeighborhoodAmiSim::GetMeterDeliveryRate(uint16_t meterId, double * beforeFailure, double * aftarFailure, double * total)
+NeighborhoodAmiSim::GetMeterDeliveryRateWithFailure(uint16_t meterId, double * beforeFailure, double * aftarFailure, double * total)
 {
 	int totalSentBeforeFailure = 0;
 	int totalRecvBeforeFailure = 0;
@@ -1509,7 +1531,7 @@ NeighborhoodAmiSim::GenerateSimulationStatistcs()
 	double afterFailure;
 	double total;
 	double meanLatency;
-	double unavailabilityTime;
+	//double unavailabilityTime;
 	int totalReceived = 0;
 	int totalSent = 0;
 	uint64_t totalLatency = 0;
@@ -1523,33 +1545,45 @@ NeighborhoodAmiSim::GenerateSimulationStatistcs()
 	for (std::map<uint16_t, std::map<uint16_t, AmiPacketInformation> >::iterator it = packetsSent.begin(); it != packetsSent.end(); it++)
 	{
 		uint16_t meterId = it->first;
-		GetMeterDeliveryRate(meterId, &beforeFailure, &afterFailure, &total);
-		meanLatency = GetMeterMeanLatency(it->first);
-		unavailabilityTime = GetMeterRecoveryTime(it->first);
-		totalReceived += GetMeterTotalReceivedPackets(it->first);
-		totalSent += it->second.size();
-		totalLatency += GetMeterTotalLatency(it->first);
-		//totalUnecessaryCopies += GetTotalUnnecessaryCopies(meterId);
-		totalSentMessages += GetTotalSentMessages(meterId);
-
 		statFile << "Meter " << it->first << "\n";
-		statFile << "Delivey Rate: " << total << "%\n";
-		statFile << "Delivey Rate (Before Failure): " << beforeFailure << "%\n";
-		statFile << "Delivey Rate (After Failure): " << afterFailure << "%\n";
+
+		if (withFailure)
+		{
+			GetMeterDeliveryRateWithFailure(meterId, &beforeFailure, &afterFailure, &total);
+
+			statFile << "Delivey Rate: " << total << "%\n";
+			statFile << "Delivey Rate (Before Failure): " << beforeFailure << "%\n";
+			statFile << "Delivey Rate (After Failure): " << afterFailure << "%\n";
+		}
+		else
+		{
+			statFile << "Delivey Rate: " << GetMeterDeliveryRateNoFailure(meterId) << "%\n";
+		}
+
+		meanLatency = GetMeterMeanLatency(it->first);
+		//unavailabilityTime = GetMeterRecoveryTime(it->first);
+
 
 		if ( meanLatency != Time::Max().GetSeconds())
 		{
-			statFile << "Mean Latency: " << meanLatency << " ms\n";
+			statFile << "Mean Latency: " << meanLatency << " ms\n\n";
 		}
 
-		if (unavailabilityTime != Time::Max().GetSeconds())
+		/*if (unavailabilityTime != Time::Max().GetSeconds())
 		{
 			statFile << "Recovery time: " << unavailabilityTime << " s\n\n";
 		}
 		else
 		{
 			statFile << "Recovery time: Infinity" << "\n\n";
-		}
+		}*/
+
+
+		totalReceived += GetMeterTotalReceivedPackets(it->first);
+		totalSent += it->second.size();
+		totalLatency += GetMeterTotalLatency(it->first);
+		//totalUnecessaryCopies += GetTotalUnnecessaryCopies(meterId);
+		totalSentMessages += GetTotalSentMessages(meterId);
 	}
 
 	statFile << "Total Delivey Rate: " << (totalReceived * 100) / (double)totalSent << "%\n";
