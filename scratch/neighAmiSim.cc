@@ -1344,8 +1344,8 @@ NeighborhoodAmiSim::GetSimulationDir()
 
 
 
-	//return dir + std::to_string(ddsa_retrans) + "/Round" + std::to_string(simulationRound) + "/";
-	return dir + "/Round" + std::to_string(simulationRound) + "/";
+	return dir + std::to_string(ddsa_retrans) + "/Round" + std::to_string(simulationRound) + "/";
+	//return dir + "/Round" + std::to_string(simulationRound) + "/";
 }
 
 double

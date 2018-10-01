@@ -59,8 +59,8 @@ function execute
 #execute "no_failure" "dumb" "/home/igorribeiro/github/ns-3.26/sim" 1 5 10 3 &
 #execute "no_failure" "dumb" "/home/igorribeiro/github/ns-3.26/sim" 6 10 10 3
 
-execute "full_failure" "etx" "/home/igorribeiro/github/ns-3.26/sim" 1 5 0 3 &
-execute "full_failure" "etx" "/home/igorribeiro/github/ns-3.26/sim" 6 10 0 3
+#execute "full_failure" "etx" "/home/igorribeiro/github/ns-3.26/sim" 1 5 0 3 &
+#execute "full_failure" "etx" "/home/igorribeiro/github/ns-3.26/sim" 6 10 0 3
 
 execute "full_failure" "dumb" "/home/igorribeiro/github/ns-3.26/sim" 1 5 10 3 &
 execute "full_failure" "dumb" "/home/igorribeiro/github/ns-3.26/sim" 6 10 10 3
@@ -68,15 +68,15 @@ execute "full_failure" "dumb" "/home/igorribeiro/github/ns-3.26/sim" 6 10 10 3
 execute "full_failure" "original" "/home/igorribeiro/github/ns-3.26/sim" 1 5 10 3 &
 execute "full_failure" "original" "/home/igorribeiro/github/ns-3.26/sim" 6 10 10 3
 
-execute "full_failure" "dynamic_global" "/home/igorribeiro/github/ns-3.26/sim" 1 5 3 3 &
-execute "full_failure" "dynamic_global" "/home/igorribeiro/github/ns-3.26/sim" 6 10 3 3
+#execute "full_failure" "dynamic_global" "/home/igorribeiro/github/ns-3.26/sim" 1 5 3 3 &
+#execute "full_failure" "dynamic_global" "/home/igorribeiro/github/ns-3.26/sim" 6 10 3 3
 
-execute "full_failure" "flooding" "/home/igorribeiro/github/ns-3.26/sim" 1 5 3 3 &
-execute "full_failure" "flooding" "/home/igorribeiro/github/ns-3.26/sim" 6 10 3 3
+#execute "full_failure" "flooding" "/home/igorribeiro/github/ns-3.26/sim" 1 5 3 3 &
+#execute "full_failure" "flooding" "/home/igorribeiro/github/ns-3.26/sim" 6 10 3 3
 
 
-execute "malicious_failure" "etx" "/home/igorribeiro/github/ns-3.26/sim" 1 5 0 3 &
-execute "malicious_failure" "etx" "/home/igorribeiro/github/ns-3.26/sim" 6 10 0 3
+#execute "malicious_failure" "etx" "/home/igorribeiro/github/ns-3.26/sim" 1 5 0 3 &
+#execute "malicious_failure" "etx" "/home/igorribeiro/github/ns-3.26/sim" 6 10 0 3
 
 execute "malicious_failure" "dumb" "/home/igorribeiro/github/ns-3.26/sim" 1 5 10 3 &
 execute "malicious_failure" "dumb" "/home/igorribeiro/github/ns-3.26/sim" 6 10 10 3
@@ -84,8 +84,8 @@ execute "malicious_failure" "dumb" "/home/igorribeiro/github/ns-3.26/sim" 6 10 1
 execute "malicious_failure" "original" "/home/igorribeiro/github/ns-3.26/sim" 1 5 10 3 &
 execute "malicious_failure" "original" "/home/igorribeiro/github/ns-3.26/sim" 6 10 10 3
 
-execute "malicious_failure" "dynamic_global" "/home/igorribeiro/github/ns-3.26/sim" 1 5 3 3 &
-execute "malicious_failure" "dynamic_global" "/home/igorribeiro/github/ns-3.26/sim" 6 10 3 3
+#execute "malicious_failure" "dynamic_global" "/home/igorribeiro/github/ns-3.26/sim" 1 5 3 3 &
+#execute "malicious_failure" "dynamic_global" "/home/igorribeiro/github/ns-3.26/sim" 6 10 3 3
 
-execute "malicious_failure" "flooding" "/home/igorribeiro/github/ns-3.26/sim" 1 5 3 3 &
-execute "malicious_failure" "flooding" "/home/igorribeiro/github/ns-3.26/sim" 6 10 3 3
+#execute "malicious_failure" "flooding" "/home/igorribeiro/github/ns-3.26/sim" 1 5 3 3 &
+#execute "malicious_failure" "flooding" "/home/igorribeiro/github/ns-3.26/sim" 6 10 3 3
